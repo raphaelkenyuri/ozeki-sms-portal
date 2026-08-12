@@ -1,0 +1,39 @@
+services:
+
+  app:
+    build: .
+    image: ozeki-sms-app:latest
+    container_name: ozeki-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    env_file: .env
+    environment:
+      # Override DB_HOST so the app reaches the db container, not localhost
+      DB_HOST: db
+      DB_PORT: "3306"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mariadb:11
+    container_name: ozeki-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-rootchangeme}"
+      MARIADB_DATABASE: "${DB_NAME:-ozeki_app}"
+      MARIADB_USER: "${DB_USER:-ozeki_app}"
+      MARIADB_PASSWORD: "${DB_PASSWORD:-changeme}"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  db_data:

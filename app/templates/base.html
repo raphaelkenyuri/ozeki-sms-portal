@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Ozeki SMS{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<header class="app-header" role="banner">
+  <a href="/addresses" class="app-header__brand" aria-label="Ozeki SMS — home">
+    <!--
+      LOGO PLACEHOLDER
+      Replace this <div> with:
+        <img src="{{ url_for('static', filename='logo.svg') }}"
+             alt="ICRC" width="34" height="34">
+      using an officially licensed asset from ICRC Brand & Identity.
+
+      LEGAL NOTICE: The Red Cross and Red Crescent emblems are protected
+      under the Geneva Conventions (1949). They may NOT be used decoratively.
+      Contact ICRC Brand & Identity before placing any emblem here.
+    -->
+    <div class="logo-placeholder" aria-hidden="true">LOGO</div>
+    <div class="app-header__wordmark">
+      <span class="app-header__name">Ozeki SMS</span>
+      <span class="app-header__context">Field Communication Gateway</span>
+    </div>
+  </a>
+
+  <nav class="app-nav" aria-label="Primary navigation">
+    <a href="/addresses"
+       class="app-nav__link"
+       {% if request.path == '/' or request.path.startswith('/addresses') or request.path.startswith('/messages') %}aria-current="page"{% endif %}>
+      Addresses
+    </a>
+    <a href="/reports"
+       class="app-nav__link"
+       {% if request.path.startswith('/reports') %}aria-current="page"{% endif %}>
+      Reports
+    </a>
+  </nav>
+</header>
+
+<main class="app-main" id="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

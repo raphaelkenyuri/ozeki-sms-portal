@@ -1,0 +1,124 @@
+/*
+ * tokens.css — Ozeki SMS design tokens
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Single source of truth for all brand values.
+ * To integrate official ICRC brand assets:
+ *   1. Replace the hex values under "Brand colours" with official ICRC values.
+ *   2. Add an @font-face (or CDN <link>) above this file for the official
+ *      ICRC typeface, then replace the --font-family-* values below.
+ *   3. Replace the logo placeholder in base.html with:
+ *        <img src="{{ url_for('static', filename='logo.svg') }}" alt="ICRC" …>
+ *      using an officially licensed asset supplied by ICRC Brand & Identity.
+ *
+ * !! LEGAL NOTICE !!
+ * The Red Cross and Red Crescent emblems are internationally protected symbols
+ * under the Geneva Conventions (1949) and their Additional Protocols. They may
+ * ONLY be displayed by authorised entities using officially licensed assets.
+ * Do NOT generate, approximate, or simulate these emblems in code or images.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+:root {
+
+  /* ── Brand colours ─────────────────────────────────────────────────────────
+     PLACEHOLDER values. Replace with official ICRC brand palette.
+     --color-accent is the humanitarian red used for priority indicators.
+     REPLACE WITH THE OFFICIAL ICRC RED from the Brand Guidelines.          */
+  --color-brand-primary:  #1a3a5c;   /* placeholder navy  — replace with ICRC primary */
+  --color-brand-dark:     #122840;   /* hover / pressed variant */
+  --color-accent:         #C8102E;   /* REPLACE WITH OFFICIAL ICRC RED */
+  --color-accent-subtle:  #fde8ec;   /* light tint of accent for backgrounds */
+
+  /* ── Neutrals ──────────────────────────────────────────────────────────── */
+  --color-background:     #f2f4f7;
+  --color-surface:        #ffffff;
+  --color-surface-alt:    #f8f9fb;
+  --color-border:         #d0d7df;
+  --color-border-light:   #e8ecf0;
+
+  /* ── Text ──────────────────────────────────────────────────────────────── */
+  --color-text-primary:   #131820;
+  --color-text-secondary: #3f4a58;
+  --color-text-muted:     #6b7685;
+  --color-text-inverse:   #ffffff;
+
+  /* ── Status — Safe / Unsafe / Out of country / Unknown ─────────────────── */
+  --color-safe-bg:        #dcfce7;
+  --color-safe-text:      #14532d;
+  --color-safe-border:    #86efac;
+
+  --color-unsafe-bg:      #fee2e2;
+  --color-unsafe-text:    #7f1d1d;
+  --color-unsafe-border:  #fca5a5;
+
+  --color-out-bg:         #fef9c3;
+  --color-out-text:       #713f12;
+  --color-out-border:     #fde047;
+
+  --color-unknown-bg:     #f1f5f9;
+  --color-unknown-text:   #334155;
+  --color-unknown-border: #cbd5e1;
+
+  /* ── Typography ────────────────────────────────────────────────────────────
+     Replace 'system-ui' with the official ICRC typeface once licensed.
+     Add an @font-face declaration or CDN <link> and update both families.   */
+  --font-family-base:    system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-family-mono:    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  --font-size-2xs:  10px;
+  --font-size-xs:   11px;
+  --font-size-sm:   13px;
+  --font-size-base: 15px;
+  --font-size-md:   16px;
+  --font-size-lg:   19px;
+  --font-size-xl:   23px;
+  --font-size-2xl:  30px;
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --line-height-tight:  1.25;
+  --line-height-base:   1.55;
+  --line-height-loose:  1.75;
+
+  --letter-spacing-label: 0.07em;   /* for all-caps eyebrow labels */
+
+  /* ── Spacing (4-point grid) ────────────────────────────────────────────── */
+  --sp-1:   4px;
+  --sp-2:   8px;
+  --sp-3:   12px;
+  --sp-4:   16px;
+  --sp-5:   20px;
+  --sp-6:   24px;
+  --sp-7:   28px;
+  --sp-8:   32px;
+  --sp-10:  40px;
+  --sp-12:  48px;
+
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+  --content-max-width: 1040px;
+  --header-height:      60px;
+
+  /* ── Shape ─────────────────────────────────────────────────────────────── */
+  --radius-sm:  3px;
+  --radius-md:  6px;
+  --radius-lg:  10px;
+
+  /* ── Elevation ─────────────────────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.03);
+  --shadow-md: 0 3px 10px rgba(0,0,0,.09), 0 0 0 1px rgba(0,0,0,.04);
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0ms;
+    --transition-base: 0ms;
+  }
+}

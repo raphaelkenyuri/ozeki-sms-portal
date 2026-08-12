@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Reports — Ozeki SMS{% endblock %}
+{% block content %}
+
+{% set ns = namespace(total=0, safe=0, unsafe=0, out=0) %}
+{% for row in by_code %}
+  {% set ns.total = ns.total + row.total %}
+  {% if row.status | lower == 'safe' %}
+    {% set ns.safe = ns.safe + row.total %}
+  {% elif 'unsafe' in (row.status | lower) %}
+    {% set ns.unsafe = ns.unsafe + row.total %}
+  {% elif 'country' in (row.status | lower) %}
+    {% set ns.out = ns.out + row.total %}
+  {% endif %}
+{% endfor %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Analytics</p>
+  <h1 class="page-header__title">Reports</h1>
+  <p class="page-header__desc">
+    Inbound response breakdown and outbound message history.
+    Data updates in real time as replies arrive via the Ozeki webhook.
+  </p>
+</div>
+
+<!-- ─── Summary stats ─────────────────────────────────────────────────── -->
+{% if by_code %}
+<div class="stat-row" aria-label="Response summary">
+  <div class="stat-card">
+    <div class="stat-card__label">Total responses</div>
+    <div class="stat-card__value">{{ ns.total }}</div>
+  </div>
+  <div class="stat-card stat-card--safe">
+    <div class="stat-card__label">Safe</div>
+    <div class="stat-card__value">{{ ns.safe }}</div>
+  </div>
+  <div class="stat-card stat-card--unsafe">
+    <div class="stat-card__label">Unsafe</div>
+    <div class="stat-card__value">{{ ns.unsafe }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label">Out of country</div>
+    <div class="stat-card__value">{{ ns.out }}</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ─── Responses by status code ──────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Breakdown</p>
+      <h2 class="card__title">Responses by status</h2>
+      <p class="card__subtitle">Inbound replies aggregated by translated response code.</p>
+    </div>
+  </div>
+
+  {% if by_code %}
+  <div class="table-wrapper">
+    <table aria-label="Responses by status">
+      <thead>
+        <tr>
+          <th scope="col">Status</th>
+          <th scope="col" style="text-align:right">Count</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in by_code %}
+        {% set s = row.status | lower %}
+        <tr>
+          <td>
+            {% if s == 'safe' %}
+              <span class="tag tag-safe">{{ row.status }}</span>
+            {% elif 'unsafe' in s %}
+              <span class="tag tag-unsafe">{{ row.status }}</span>
+            {% elif 'country' in s %}
+              <span class="tag tag-out">{{ row.status }}</span>
+            {% else %}
+              <span class="tag tag-unknown">{{ row.status }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;font-weight:var(--font-weight-semibold)">
+            {{ row.total }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No responses received yet.</div>
+  {% endif %}
+</div>
+
+<!-- ─── Responses by sender ───────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">By sender</p>
+      <h2 class="card__title">Responses by phone number</h2>
+      <p class="card__subtitle">Most recent status per sender, grouped by number and response code.</p>
+    </div>
+    {% if by_address %}
+    <span class="count-badge">{{ by_address | length }} sender{{ 's' if by_address | length != 1 }}</span>
+    {% endif %}
+  </div>
+
+  {% if by_address %}
+  <div class="table-wrapper">
+    <table aria-label="Responses by sender">
+      <thead>
+        <tr>
+          <th scope="col">From</th>
+          <th scope="col">Status</th>
+          <th scope="col" style="text-align:right">Count</th>
+          <th scope="col">Last received</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in by_address %}
+        {% set s = row.status | lower %}
+        <tr>
+          <td><code>{{ row.from_number }}</code></td>
+          <td>
+            {% if s == 'safe' %}
+              <span class="tag tag-safe">{{ row.status }}</span>
+            {% elif 'unsafe' in s %}
+              <span class="tag tag-unsafe">{{ row.status }}</span>
+            {% elif 'country' in s %}
+              <span class="tag tag-out">{{ row.status }}</span>
+            {% else %}
+              <span class="tag tag-unknown">{{ row.status }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;font-weight:var(--font-weight-semibold)">
+            {{ row.total }}
+          </td>
+          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs)">
+            {{ row.last_received }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No responses received yet.</div>
+  {% endif %}
+</div>
+
+<!-- ─── Recent outbound messages ─────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Outbound log</p>
+      <h2 class="card__title">Recent messages</h2>
+      <p class="card__subtitle">Last 50 messages sent via the gateway.</p>
+    </div>
+  </div>
+
+  {% if outbound %}
+  <div class="table-wrapper">
+    <table aria-label="Recent outbound messages">
+      <thead>
+        <tr>
+          <th scope="col">Recipient</th>
+          <th scope="col">Message</th>
+          <th scope="col">Ozeki ID</th>
+          <th scope="col">Status</th>
+          <th scope="col">Sent at</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for m in outbound %}
+        <tr>
+          <td><code>{{ m.address_ref }}</code></td>
+          <td class="cell-truncate" title="{{ m.body }}">{{ m.body }}</td>
+          <td><code>{{ m.ozeki_msg_id or '—' }}</code></td>
+          <td style="color:var(--color-text-muted)">{{ m.status or '—' }}</td>
+          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs);white-space:nowrap">
+            {{ m.sent_at }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No outbound messages yet.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

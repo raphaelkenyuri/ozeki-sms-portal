@@ -1,0 +1,12 @@
+# Install via apt (no internet/PyPI needed):
+#   sudo apt-get install -y python3-flask python3-pymysql
+#
+# Already available system-wide (pip3 list):
+#   httpx, Jinja2, lxml, pydantic, requests
+#
+# If PyPI becomes available later, pip install:
+# flask
+# pymysql
+# httpx
+# lxml
+# python-dotenv

@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% block title %}Addresses — Ozeki SMS{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Gateway</p>
+  <h1 class="page-header__title">Addresses &amp; Send</h1>
+  <p class="page-header__desc">
+    Compose and dispatch SMS messages via the Ozeki gateway.
+    Recipients reply with a numeric code — responses are tracked on the
+    <a href="/reports" style="color:var(--color-brand-primary);">Reports</a> page.
+  </p>
+</div>
+
+<!-- ─── PRIMARY: Send Message ─────────────────────────────────────────── -->
+<section class="card card--primary" id="send-form" aria-labelledby="send-heading">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Outbound</p>
+      <h2 class="card__title" id="send-heading">Send Message</h2>
+      <p class="card__subtitle">
+        Select a saved address or enter a phone number directly, then compose your message.
+        Replies of 2 = Safe · 3 = Unsafe · 4 = Out of country.
+      </p>
+    </div>
+  </div>
+
+  <form method="POST" action="/messages/send" aria-label="Send SMS form">
+
+    <div class="form-group">
+      <label class="form-label" for="address_ref">Saved address</label>
+      <select class="form-control" id="address_ref" name="address_ref"
+              aria-describedby="address-hint"
+              onchange="document.getElementById('manual_ref').value = ''">
+        <option value="" disabled selected>— select a saved address —</option>
+        {% for a in addresses %}
+        <option value="{{ a.ozeki_ref }}">{{ a.name or a.ozeki_ref }}</option>
+        {% endfor %}
+      </select>
+      <span class="form-hint" id="address-hint">
+        Select from the registered address list, or use a direct number below.
+      </span>
+    </div>
+
+    <div class="form-or" role="separator" aria-label="or">or</div>
+
+    <div class="form-group">
+      <label class="form-label" for="manual_ref">Phone number directly</label>
+      <input type="tel" class="form-control" id="manual_ref"
+             placeholder="+41 79 123 45 67"
+             aria-describedby="phone-hint"
+             autocomplete="off"
+             oninput="
+               var sel = document.getElementById('address_ref');
+               sel.value = this.value;
+             ">
+      <span class="form-hint" id="phone-hint">
+        International format (e.g. +41791234567). Overrides the selection above.
+      </span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="body">Message</label>
+      <textarea class="form-control" id="body" name="body"
+                required maxlength="160"
+                placeholder="Reply 2 for Safe · 3 for Unsafe · 4 for Out of the country"
+                aria-describedby="char-hint"
+                oninput="
+                  var n = this.value.length;
+                  var span = document.getElementById('char-count');
+                  var counter = document.getElementById('char-hint');
+                  span.textContent = n;
+                  counter.className = 'char-counter' + (n > 140 ? ' char-counter--warn' : '');
+                "></textarea>
+      <div class="char-counter" id="char-hint" aria-live="polite">
+        <span id="char-count">0</span> / 160 characters
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" aria-label="Send message via Ozeki gateway">
+        Send via Ozeki
+      </button>
+    </div>
+
+  </form>
+</section>
+
+<!-- ─── SECONDARY: Address management ────────────────────────────────── -->
+
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Registry</p>
+      <h2 class="card__title" id="add-heading">Add Address</h2>
+      <p class="card__subtitle">
+        Register the exact Ozeki reference for a group or contact so it appears in the send form.
+      </p>
+    </div>
+    <button type="button"
+            class="btn btn-outline btn-sm"
+            id="sync-btn"
+            aria-label="Synchronise addresses from Ozeki"
+            onclick="syncAddresses()">
+      Sync from Ozeki
+    </button>
+  </div>
+
+  <div id="sync-banner"
+       role="status"
+       aria-live="polite"
+       aria-atomic="true"
+       hidden></div>
+
+  <form method="POST" action="/addresses/add" aria-labelledby="add-heading">
+    <div class="form-group">
+      <label class="form-label" for="ozeki_ref">Ozeki reference</label>
+      <input type="text" class="form-control" id="ozeki_ref" name="ozeki_ref"
+             required
+             placeholder="e.g. field-team-north"
+             aria-describedby="ref-hint"
+             autocomplete="off">
+      <span class="form-hint" id="ref-hint">
+        The address name exactly as registered in Ozeki — passed as
+        <code>recipient</code> in the send API.
+      </span>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="name">
+        Display name <span class="form-label__opt">(optional)</span>
+      </label>
+      <input type="text" class="form-control" id="name" name="name"
+             placeholder="e.g. Field Team North">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-sm">Add address</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Cache</p>
+      <h2 class="card__title">Cached Addresses</h2>
+    </div>
+    {% if addresses %}
+    <span class="count-badge" aria-label="{{ addresses | length }} addresses registered">
+      {{ addresses | length }} registered
+    </span>
+    {% endif %}
+  </div>
+
+  {% if addresses %}
+  <div class="table-wrapper">
+    <table aria-label="Cached addresses">
+      <thead>
+        <tr>
+          <th scope="col">Ozeki reference</th>
+          <th scope="col">Display name</th>
+          <th scope="col">Last synced</th>
+          <th scope="col" style="width:90px;text-align:center">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in addresses %}
+        <tr>
+          <td><code>{{ a.ozeki_ref }}</code></td>
+          <td>{{ a.name or '—' }}</td>
+          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs)">
+            {{ a.last_synced }}
+          </td>
+          <td style="text-align:center">
+            <button class="btn btn-outline btn-sm"
+                    aria-label="Pre-fill send form with {{ a.name or a.ozeki_ref }}"
+                    onclick="prefillSend('{{ a.ozeki_ref | e }}')">
+              Send
+            </button>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    No addresses cached yet. Add one using the form above, or click "Sync from Ozeki".
+  </div>
+  {% endif %}
+</div>
+
+<script>
+/* Pre-fill the send form from a table row action */
+function prefillSend(ref) {
+  var sel = document.getElementById('address_ref');
+  var matched = false;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === ref) {
+      sel.selectedIndex = i;
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) {
+    /* address in cache but not in select — set value directly as fallback */
+    sel.value = ref;
+  }
+  /* clear the phone number override so the select is used */
+  document.getElementById('manual_ref').value = '';
+  document.getElementById('send-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* Sync addresses from Ozeki (stub) */
+function syncAddresses() {
+  var btn    = document.getElementById('sync-btn');
+  var banner = document.getElementById('sync-banner');
+
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+
+  fetch('/addresses/sync', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      showBanner(banner, 'info',
+        d.total_cached + ' address' + (d.total_cached === 1 ? '' : 'es') +
+        ' in cache. ' + (d.note || ''));
+      btn.disabled = false;
+      btn.textContent = 'Sync from Ozeki';
+      setTimeout(function() { location.reload(); }, 2800);
+    })
+    .catch(function() {
+      showBanner(banner, 'error', 'Sync failed. Check server logs for details.');
+      btn.disabled = false;
+      btn.textContent = 'Sync from Ozeki';
+    });
+}
+
+function showBanner(el, type, msg) {
+  el.className = 'status-banner status-banner--' + type;
+  var text = document.createElement('span');
+  text.className = 'status-banner__text';
+  text.textContent = msg;
+  var dismiss = document.createElement('button');
+  dismiss.className = 'status-banner__dismiss';
+  dismiss.setAttribute('aria-label', 'Dismiss notification');
+  dismiss.textContent = '×';
+  dismiss.onclick = function() { el.hidden = true; };
+  el.innerHTML = '';
+  el.appendChild(text);
+  el.appendChild(dismiss);
+  el.hidden = false;
+}
+</script>
+
+{% endblock %}
