@@ -10,6 +10,7 @@ A lightweight Python/Flask web application that integrates with an [Ozeki SMS Ga
 - [Architecture](#architecture)
 - [Features](#features)
 - [Prerequisites](#prerequisites)
+- [Installing MariaDB on Linux](#installing-mariadb-on-linux)
 - [WSL Setup](#wsl-setup)
   - [1. Install system packages](#1-install-system-packages)
   - [2. Start and configure MariaDB](#2-start-and-configure-mariadb)
@@ -93,6 +94,60 @@ This MVP was built for testing Ozeki SMS Gateway integration. The typical workfl
 - **MariaDB** (installed via apt below)
 - **Ozeki SMS Gateway** running on a reachable host
 - **(Optional)** [ngrok](https://ngrok.com) to expose the webhook for local testing
+
+---
+
+## Installing MariaDB on Linux
+
+### 1. Install
+
+```bash
+sudo apt-get update
+sudo apt-get install -y mariadb-server
+```
+
+### 2. Start the service
+
+```bash
+sudo service mariadb start
+```
+
+> **WSL note:** MariaDB does not start automatically on boot in WSL. Run `sudo service mariadb start` each session, or add it to your `~/.bashrc` to automate it.
+> On a regular Linux server with systemd, use `sudo systemctl enable --now mariadb` instead so it starts on boot.
+
+### 3. Secure the installation
+
+```bash
+sudo mysql_secure_installation
+```
+
+This sets a root password and removes the test database.
+
+### 4. Create the app database and user
+
+```bash
+sudo mariadb -e "
+  CREATE DATABASE IF NOT EXISTS ozeki_app CHARACTER SET utf8mb4;
+  CREATE USER IF NOT EXISTS 'ozeki_app'@'localhost' IDENTIFIED BY 'changeme';
+  GRANT ALL ON ozeki_app.* TO 'ozeki_app'@'localhost';
+"
+```
+
+> Change `changeme` to a real password and update `DB_PASSWORD` in `.env` to match.
+
+### 5. Load the schema
+
+```bash
+sudo mariadb ozeki_app < schema.sql
+```
+
+### 6. Verify
+
+```bash
+sudo mariadb ozeki_app -e "SHOW TABLES; SELECT * FROM response_codes;"
+```
+
+Expected: 5 tables listed, and rows for codes 2, 3, 4.
 
 ---
 
