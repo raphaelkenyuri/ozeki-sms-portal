@@ -17,6 +17,7 @@ A lightweight Python/Flask web application that integrates with an [Ozeki SMS Ga
   - [4. Configure the app](#4-configure-the-app)
   - [5. Run the app](#5-run-the-app)
 - [Accessing the App](#accessing-the-app)
+- [Deploy from GitHub](#deploy-from-github)
 - [Exposing the Webhook (ngrok)](#exposing-the-webhook-ngrok)
 - [Configuring Ozeki](#configuring-ozeki)
   - [HTTP API User (outbound send)](#http-api-user-outbound-send)
@@ -188,6 +189,79 @@ http://localhost:8000
 > **Corporate proxy note (ICRC/managed laptops):** If `http_proxy` is set in your environment, curl and some tools will route local requests through the proxy and fail. Use `--noproxy '*'` with curl, or just open the URL directly in a browser (browsers typically bypass the proxy for localhost automatically).
 
 The app redirects `/` → `/addresses`, so you land on the address list immediately.
+
+---
+
+## Deploy from GitHub
+
+Use this approach when you want to run the app on a machine that already has Ozeki deployed — clone the repo, configure `.env` for that environment, and start the app. No file transfer needed.
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/raphaelkenyuri/ozeki-sms-portal.git
+cd ozeki-sms-portal
+```
+
+### 2. Install dependencies
+
+```bash
+sudo apt-get update
+sudo apt-get install -y mariadb-server python3-flask python3-pymysql
+```
+
+### 3. Set up MariaDB
+
+```bash
+sudo service mariadb start
+
+sudo mariadb -e "
+  CREATE DATABASE IF NOT EXISTS ozeki_app CHARACTER SET utf8mb4;
+  CREATE USER IF NOT EXISTS 'ozeki_app'@'localhost' IDENTIFIED BY 'changeme';
+  GRANT ALL ON ozeki_app.* TO 'ozeki_app'@'localhost';
+"
+
+sudo mariadb ozeki_app < schema.sql
+```
+
+### 4. Configure `.env`
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set at minimum:
+
+```ini
+OZEKI_BASE_URL=http://127.0.0.1:9508    # Ozeki is local on this machine
+OZEKI_USERNAME=admin
+OZEKI_PASSWORD=your_ozeki_password
+OZEKI_WEBHOOK_URL=http://<THIS_MACHINE_IP>:8000/webhook/inbound
+DB_PASSWORD=changeme                     # must match what you set above
+```
+
+> **`OZEKI_WEBHOOK_URL` is the most important value to get right.** It must be a URL that the Ozeki server can reach over the network. If Ozeki and the Flask app are on the same machine, `http://127.0.0.1:8000/webhook/inbound` works. If Ozeki is on a different host, use this machine's real IP or hostname.
+
+### 5. Start the app
+
+```bash
+python3 -m app.main
+```
+
+Or in the background:
+
+```bash
+nohup python3 -m app.main > /tmp/ozeki-app.log 2>&1 &
+```
+
+### 6. Verify
+
+```bash
+curl --noproxy '*' http://localhost:8000/health
+# Expected: {"status": "ok"}
+```
+
+Then open `http://localhost:8000` in a browser — you should land on the address list.
 
 ---
 
