@@ -1,11 +1,25 @@
 """
-Inbound webhook — Ozeki HTTP Client user calls this URL when a message arrives.
+Inbound webhook — OpenVox pushes a GET request here when an SMS arrives.
 
-Configure the URL template in Ozeki's HTTP Client user settings as:
-  http://YOUR_HOST:5000/webhook/inbound?from=$originator&to=$recipient&msg=$messagedata&msgid=$messageid&time=$submitdate
+OpenVox SMS-to-HTTP config (SMS → SMS Settings → SMS to HTTP):
+  Enable: ON
+  URL: http://<THIS_MACHINE_IP>:8000/api
+       ?from=phonenumber&port=port&channel=portname&text=message
+       &time=time&imsi=imsi&status=status&openvox=openvox
 
-Ozeki substitutes the $variables before making the GET request.
-Must return HTTP 2xx; Ozeki retries on non-2xx.
+Only the port (9501 → 8000) and path (/api) need to change from the
+default OpenVox template. All parameter names are kept as OpenVox sends them.
+
+OpenVox parameters used:
+  from    — sender phone number
+  text    — SMS message body
+  port    — GSM port number
+  channel — GSM port name (e.g. gsm-1.1)
+  time    — timestamp from device
+  imsi    — SIM IMSI
+  status  — delivery status
+
+Must return HTTP 2xx; OpenVox retries on non-2xx.
 """
 
 import logging
@@ -25,13 +39,14 @@ def _extract_code(text: str):
     return int(m.group()) if m else None
 
 
-@bp.get("/webhook/inbound")
-def inbound():
+def _handle_inbound():
+    # OpenVox sends: from=<number>, text=<body>, port=<n>, channel=<name>
     from_number = request.args.get("from", "unknown")
-    msg         = request.args.get("msg", "")
-    msgid       = request.args.get("msgid", "")
+    msg         = request.args.get("text", "")
+    port        = request.args.get("port", "")
+    channel     = request.args.get("channel", "")
 
-    log.info("Inbound webhook: from=%s msgid=%s msg=%r", from_number, msgid, msg)
+    log.info("Inbound SMS: from=%s port=%s channel=%s msg=%r", from_number, port, channel, msg)
 
     code = _extract_code(msg)
     translated = None
@@ -61,3 +76,15 @@ def inbound():
             )
 
     return ("OK", 200)
+
+
+@bp.get("/api")
+def openvox_inbound():
+    """Primary endpoint — matches the /api path OpenVox uses by default."""
+    return _handle_inbound()
+
+
+@bp.get("/webhook/inbound")
+def inbound():
+    """Legacy path kept for compatibility."""
+    return _handle_inbound()

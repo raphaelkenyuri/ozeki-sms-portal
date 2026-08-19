@@ -25,6 +25,10 @@ OZEKI_USERNAME   = _get("OZEKI_USERNAME",   "admin")
 OZEKI_PASSWORD   = _get("OZEKI_PASSWORD",   "")
 OZEKI_WEBHOOK_URL = _get("OZEKI_WEBHOOK_URL", "http://localhost:5000/webhook/inbound")
 
+OPENVOX_BASE_URL = _get("OPENVOX_BASE_URL", "http://192.168.150.20")
+OPENVOX_USERNAME = _get("OPENVOX_USERNAME", "smsuser")
+OPENVOX_PASSWORD = _get("OPENVOX_PASSWORD", "")
+
 DB_HOST     = _get("DB_HOST",     "127.0.0.1")
 DB_PORT     = int(_get("DB_PORT", "3306"))
 DB_USER     = _get("DB_USER",     "ozeki_app")

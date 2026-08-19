@@ -1,6 +1,6 @@
-# Ozeki SMS Gateway MVP
+# OpenVox SMS Gateway Portal
 
-A lightweight Python/Flask web application that integrates with an [Ozeki SMS Gateway](https://ozeki-sms-gateway.com). It acts as a **client and reporting layer** — Ozeki is the source of truth for all SMS activity. Every table in the local MariaDB database is a cache or projection that can be fully rebuilt by re-syncing from Ozeki.
+A lightweight Python/Flask web application that integrates with an **OpenVox GSM SMS Gateway**. It acts as a **client and reporting layer** — OpenVox is the source of truth for all SMS activity. Every table in the local MariaDB database is a cache or projection that can be fully rebuilt from OpenVox.
 
 ---
 
@@ -20,13 +20,13 @@ A lightweight Python/Flask web application that integrates with an [Ozeki SMS Ga
 - [Accessing the App](#accessing-the-app)
 - [Deploy from GitHub](#deploy-from-github)
 - [Exposing the Webhook (ngrok)](#exposing-the-webhook-ngrok)
-- [Configuring Ozeki](#configuring-ozeki)
-  - [HTTP API User (outbound send)](#http-api-user-outbound-send)
-  - [HTTP Client User (inbound webhook)](#http-client-user-inbound-webhook)
+- [Configuring OpenVox](#configuring-openvox)
+  - [Outbound send (sendsms)](#outbound-send-sendsms)
+  - [Inbound webhook (HTTP to SMS)](#inbound-webhook-http-to-sms)
 - [Application Routes](#application-routes)
 - [Database Schema](#database-schema)
 - [Environment Variables](#environment-variables)
-- [Ozeki HTTP API Reference](#ozeki-http-api-reference)
+- [OpenVox HTTP API Reference](#openvox-http-api-reference)
 - [Response Code Mapping](#response-code-mapping)
 - [Address Management](#address-management)
 - [Rebuilding the Database](#rebuilding-the-database)
@@ -44,16 +44,16 @@ A lightweight Python/Flask web application that integrates with an [Ozeki SMS Ga
 
 ## Overview
 
-This MVP was built for testing Ozeki SMS Gateway integration. The typical workflow is:
+The typical workflow is:
 
-1. **Send**: Select an Ozeki address (recipient group) in the UI and send a message. The app calls Ozeki's HTTP send API and stores the returned message ID.
-2. **Receive**: Recipients reply with a numeric code (2, 3, or 4). Ozeki forwards the inbound SMS to this app's webhook endpoint.
+1. **Send**: Select an address in the UI and send a message. The app calls the OpenVox `/sendsms` HTTP API and stores the returned message ID.
+2. **Receive**: Recipients reply with a numeric code (2, 3, or 4). OpenVox forwards the inbound SMS to this app's webhook endpoint via an HTTP GET push.
 3. **Report**: The app translates the numeric code to a label (Safe / Unsafe / Out of the country) and stores it. A reporting page shows responses grouped by status and by sender.
 
 ```
-[ Browser ] ──► [ Flask App :8000 ] ──► [ Ozeki Gateway ]
-                        │                       │
-                        │◄──── inbound SMS ─────┘ (webhook push)
+[ Browser ] ──► [ Flask App :8000 ] ──► [ OpenVox Gateway :80 ]
+                        │                         │
+                        │◄──── inbound SMS ────────┘  (HTTP GET push)
                         │
                    [ MariaDB ]   (cache only — rebuildable)
 ```
@@ -64,8 +64,8 @@ This MVP was built for testing Ozeki SMS Gateway integration. The typical workfl
 
 | Principle | Detail |
 |---|---|
-| **Ozeki is authoritative** | The app never invents state. All data originates from Ozeki. |
-| **DB is a cache** | Any table can be dropped and rebuilt from Ozeki. |
+| **OpenVox is authoritative** | The app never invents state. All data originates from OpenVox. |
+| **DB is a cache** | Any table can be dropped and rebuilt from OpenVox. |
 | **No hardcoded secrets** | All credentials and URLs come from `.env`. |
 | **Minimal dependencies** | Flask, pymysql, httpx, lxml, Jinja2 — all installable via apt. |
 
@@ -92,7 +92,7 @@ This MVP was built for testing Ozeki SMS Gateway integration. The typical workfl
 - **WSL** (Ubuntu 22.04 recommended) or any Linux environment
 - **Python 3.10+** (comes with Ubuntu 22.04)
 - **MariaDB** (installed via apt below)
-- **Ozeki SMS Gateway** running on a reachable host
+- **OpenVox GSM Gateway** reachable on the local network (e.g. `192.168.150.20`)
 - **(Optional)** [ngrok](https://ngrok.com) to expose the webhook for local testing
 
 ---
@@ -201,10 +201,9 @@ cp .env.example .env
 Open `.env` and fill in the values for your environment:
 
 ```ini
-OZEKI_BASE_URL=http://192.168.1.10:9508   # your Ozeki server IP + port
-OZEKI_USERNAME=admin
-OZEKI_PASSWORD=your_ozeki_password
-OZEKI_WEBHOOK_URL=http://YOUR_HOST:8000/webhook/inbound
+OPENVOX_BASE_URL=http://192.168.150.20    # your OpenVox gateway IP
+OPENVOX_USERNAME=smsuser
+OPENVOX_PASSWORD=your_openvox_password
 
 DB_PASSWORD=changeme   # must match what you set above
 ```
@@ -288,14 +287,13 @@ cp .env.example .env
 Edit `.env` and set at minimum:
 
 ```ini
-OZEKI_BASE_URL=http://127.0.0.1:9508    # Ozeki is local on this machine
-OZEKI_USERNAME=admin
-OZEKI_PASSWORD=your_ozeki_password
-OZEKI_WEBHOOK_URL=http://<THIS_MACHINE_IP>:8000/webhook/inbound
-DB_PASSWORD=changeme                     # must match what you set above
+OPENVOX_BASE_URL=http://192.168.150.20   # OpenVox gateway IP on your LAN
+OPENVOX_USERNAME=smsuser
+OPENVOX_PASSWORD=your_openvox_password
+DB_PASSWORD=changeme                      # must match what you set above
 ```
 
-> **`OZEKI_WEBHOOK_URL` is the most important value to get right.** It must be a URL that the Ozeki server can reach over the network. If Ozeki and the Flask app are on the same machine, `http://127.0.0.1:8000/webhook/inbound` works. If Ozeki is on a different host, use this machine's real IP or hostname.
+> **Ensure OpenVox can reach your webhook URL.** The callback URL you configure on the OpenVox device must resolve to this machine's real LAN IP — not `localhost` or a WSL-only address. Use ngrok if you're testing from WSL.
 
 ### 5. Start the app
 
@@ -320,74 +318,101 @@ Then open `http://localhost:8000` in a browser — you should land on the addres
 
 ---
 
-## Exposing the Webhook (ngrok)
+## Exposing the Webhook from WSL
 
-Ozeki needs to reach your app's `/webhook/inbound` endpoint over the network. In WSL, you need a tunnel.
+The Flask app runs inside WSL on a private subnet (e.g. `172.20.252.111`). The OpenVox device is on the physical LAN (`192.168.150.x`) and cannot reach WSL directly. You must forward port 8000 from your Windows host into WSL.
 
-**Install ngrok** (if not already):
+### Option A — Windows port forwarding (recommended)
+
+Run in **PowerShell as Administrator** on Windows:
+
+```powershell
+# Get current WSL IP
+wsl hostname -I
+
+# Forward Windows port 8000 → WSL (replace 172.20.252.111 with your WSL IP)
+netsh interface portproxy add v4tov4 listenport=8000 listenaddress=0.0.0.0 connectport=8000 connectaddress=172.20.252.111
+
+# Allow through Windows Firewall
+netsh advfirewall firewall add rule name="OpenVox SMS Port 8000" dir=in action=allow protocol=TCP localport=8000
+```
+
+Verify it works from another machine on the LAN:
+```bash
+curl http://192.168.150.246:8000/health
+# Expected: {"status":"ok"}
+```
+
+> **Note:** The WSL IP changes every time WSL restarts. Re-run `wsl hostname -I` and update the `portproxy` rule after each reboot.
+
+To remove the rule later:
+```powershell
+netsh interface portproxy delete v4tov4 listenport=8000 listenaddress=0.0.0.0
+```
+
+### Option B — ngrok tunnel
 
 ```bash
-# Download from https://ngrok.com/download, or:
 sudo snap install ngrok
 ngrok config add-authtoken <your-token>
-```
-
-**Start the tunnel:**
-
-```bash
 ngrok http 8000
+# Forwarding: https://a1b2c3d4.ngrok.io → http://localhost:8000
 ```
 
-ngrok will print something like:
-
-```
-Forwarding  https://a1b2c3d4.ngrok.io -> http://localhost:8000
-```
-
-**Update your `.env`:**
-
-```ini
-OZEKI_WEBHOOK_URL=https://a1b2c3d4.ngrok.io/webhook/inbound
-```
-
-Then use the full webhook URL when configuring Ozeki (see next section).
+Use the ngrok URL as the OpenVox callback base (see next section).
 
 ---
 
-## Configuring Ozeki
+## Configuring OpenVox
 
-### HTTP API User (outbound send)
+### Outbound send (sendsms)
 
-This app calls Ozeki's HTTP API to send messages. You need an **HTTP API user** in Ozeki with:
+The app sends messages by calling the OpenVox `/sendsms` HTTP API. Set the credentials in `.env`:
 
-- A username and password (set in `.env` as `OZEKI_USERNAME` / `OZEKI_PASSWORD`)
-- Permission to send messages
-
-No special webhook URL is needed for this user — it's used in outbound direction only.
-
-### HTTP Client User (inbound webhook)
-
-To receive inbound SMS, create an **HTTP Client user** in Ozeki's admin panel and set its URL template to:
-
-```
-http://YOUR_HOST:8000/webhook/inbound?from=$originator&to=$recipient&msg=$messagedata&msgid=$messageid&time=$submitdate
+```ini
+OPENVOX_BASE_URL=http://192.168.150.20
+OPENVOX_USERNAME=smsuser
+OPENVOX_PASSWORD=your_password
 ```
 
-Replace `YOUR_HOST:8000` with your ngrok URL (or your server's real host) if Ozeki runs on a different machine.
+No configuration is needed on the OpenVox device itself for outbound — the app calls it directly.
 
-**How it works:** When Ozeki receives an SMS, it substitutes the `$variables` with the actual message fields and makes a GET request to your URL. The app receives the parameters, parses the numeric response code from the message body, looks it up in the `response_codes` table, and stores the result.
+> **Corporate proxy note:** The app uses `httpx` with `trust_env=False` so the corporate `HTTP_PROXY` does not intercept requests to the OpenVox device on the local network.
 
-**Ozeki URL template variables used:**
+### Inbound webhook (SMS to HTTP)
 
-| Variable | Field | Parameter name in our URL |
-|---|---|---|
-| `$originator` | Sender's phone number | `from` |
-| `$recipient` | Recipient (your number) | `to` |
-| `$messagedata` | Message body | `msg` |
-| `$messageid` | Ozeki's message ID | `msgid` |
-| `$submitdate` | Submission timestamp | `time` |
+On the OpenVox web UI (`http://192.168.150.20`), go to **SMS → SMS Settings → SMS to HTTP**:
 
-> The webhook must return HTTP 2xx. Ozeki will retry on any other status code. Our endpoint always returns `200 OK`.
+| Setting | Value |
+|---|---|
+| Enable | ON |
+| Enable SMS Reports to HTTP | ON |
+| Enable AsyncSMS Result to HTTP | ON |
+| URL | see below |
+
+Set the URL to (keep all parameter names exactly as shown — only change the IP and port):
+
+```
+http://192.168.150.246:8000/api?from=phonenumber&port=port&channel=portname&text=message&time=time&imsi=imsi&status=status&openvox=openvox
+```
+
+Replace `192.168.150.246` with your Windows machine's LAN IP. The path `/api` and all parameter names must stay exactly as shown — the app reads `from` and `text` which are the native OpenVox field names.
+
+**How it works:** When OpenVox receives an SMS it fills in the parameter values and GETs that URL. The app reads `from` (sender) and `text` (message body), parses the response code digit, and stores the result.
+
+**OpenVox parameter mapping:**
+
+| OpenVox param | What it contains |
+|---|---|
+| `from` | Sender's phone number |
+| `text` | SMS message body |
+| `port` | GSM port number |
+| `channel` | GSM port name (e.g. gsm-1.1) |
+| `time` | Timestamp |
+| `imsi` | SIM IMSI |
+| `status` | Delivery status |
+
+> The endpoint always returns `200 OK`. OpenVox retries on non-2xx.
 
 ---
 
@@ -400,8 +425,9 @@ Replace `YOUR_HOST:8000` with your ngrok URL (or your server's real host) if Oze
 | `GET` | `/addresses` | Address list page (from DB cache) + send form |
 | `POST` | `/addresses/add` | Manually add an address to the local cache |
 | `POST` | `/addresses/sync` | Attempt to pull addresses from Ozeki (stub — see [Address Management](#address-management)) |
-| `POST` | `/messages/send` | Send a message via Ozeki; stores `ozeki_msg_id` |
-| `GET` | `/webhook/inbound` | Inbound SMS webhook called by Ozeki |
+| `POST` | `/messages/send` | Send a message via OpenVox; stores message ID |
+| `GET` | `/api` | Primary inbound SMS webhook (OpenVox native params: `from`, `text`) |
+| `GET` | `/webhook/inbound` | Alias for `/api` (legacy path) |
 | `GET` | `/reports` | Reporting page: by-code + by-sender breakdowns |
 
 ---
@@ -448,10 +474,10 @@ Record of every message sent through the app.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INT PK | |
-| `address_ref` | VARCHAR(100) | The `ozeki_ref` (or phone number) it was sent to |
+| `address_ref` | VARCHAR(100) | The phone number or address ref it was sent to |
 | `body` | TEXT | Message content |
-| `ozeki_msg_id` | VARCHAR(16) | Correlation key returned by Ozeki (e.g. `ERFAV23D`) |
-| `status` | VARCHAR(50) | Ozeki's status message |
+| `ozeki_msg_id` | VARCHAR(16) | Message ID returned by OpenVox (may be `"null"` until device assigns one) |
+| `status` | VARCHAR(50) | OpenVox result string (e.g. `sending`) |
 | `sent_at` | DATETIME | |
 
 ### `inbound_responses`
@@ -474,10 +500,9 @@ Copy `.env.example` to `.env` and fill in the values. Never commit `.env`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `OZEKI_BASE_URL` | `http://127.0.0.1:9508` | Base URL of your Ozeki server |
-| `OZEKI_USERNAME` | `admin` | HTTP API user username in Ozeki |
-| `OZEKI_PASSWORD` | _(empty)_ | HTTP API user password in Ozeki |
-| `OZEKI_WEBHOOK_URL` | `http://localhost:8000/webhook/inbound` | Public URL Ozeki calls for inbound messages. Use your ngrok URL when testing. |
+| `OPENVOX_BASE_URL` | `http://192.168.150.20` | Base URL of your OpenVox gateway |
+| `OPENVOX_USERNAME` | `smsuser` | HTTP API username on the OpenVox device |
+| `OPENVOX_PASSWORD` | _(empty)_ | HTTP API password on the OpenVox device |
 | `DB_HOST` | `127.0.0.1` | MariaDB host |
 | `DB_PORT` | `3306` | MariaDB port |
 | `DB_USER` | `ozeki_app` | MariaDB username |
@@ -487,64 +512,45 @@ Copy `.env.example` to `.env` and fill in the values. Never commit `.env`.
 
 ---
 
-## Ozeki HTTP API Reference
-
-This app uses two Ozeki HTTP API actions. Both support GET and POST; we use GET.
+## OpenVox HTTP API Reference
 
 ### Send a message
 
 ```
-GET http://<ozeki-host>:9508/api
-    ?action=sendmessage
-    &username=<user>
+GET http://<openvox-host>/sendsms
+    ?username=<user>
     &password=<pass>
-    &recipient=<address-or-phone>
-    &messagetype=SMS:TEXT
-    &messagedata=<url-encoded-message>
-    &responseformat=xml
+    &phonenumber=<number-or-address>
+    &message=<url-encoded-message>
 ```
 
-**Success response (XML):**
-```xml
-<response>
-  <statuscode>0</statuscode>
-  <statusmessage>Message accepted for delivery</statusmessage>
-  <messageid>ERFAV23D</messageid>
-  <recipient>+36201234567</recipient>
-</response>
+**Success response (JSON):**
+```json
+{
+  "message": "Are you safe?",
+  "report": [{
+    "1": [{
+      "port": "1",
+      "phonenumber": "254716046448",
+      "time": "2026-08-19 14:40:52",
+      "id": "null",
+      "result": "sending"
+    }]
+  }]
+}
 ```
 
-`statuscode=0` means accepted. Any other value is an error. `messageid` (max 16 chars) is the correlation key stored in `outbound_messages.ozeki_msg_id`.
+`result == "sending"` means the gateway accepted the message. The `id` field is the message correlation key stored in `outbound_messages.ozeki_msg_id` (may be the string `"null"` until the device assigns a real ID).
 
-### Poll the inbox
+### Receive (inbound push)
+
+OpenVox does **not** expose a polling inbox API. Instead it pushes inbound SMS to a configured callback URL via HTTP GET. Configure on the device at **SMS → SMS Settings → SMS to HTTP**:
 
 ```
-GET http://<ozeki-host>:9508/api
-    ?action=receivemessage
-    &username=<user>
-    &password=<pass>
-    &folder=inbox
-    &limit=100
-    &afterdownload=delete
-    &responseformat=xml
+http://192.168.150.246:8000/api?from=phonenumber&port=port&channel=portname&text=message&time=time&imsi=imsi&status=status&openvox=openvox
 ```
 
-**Response (XML):**
-```xml
-<response>
-  <message>
-    <messageid>...</messageid>
-    <originator>+36201234567</originator>
-    <recipient>+36301234567</recipient>
-    <messagetype>SMS:TEXT</messagetype>
-    <messagedata>Hello</messagedata>
-    <senttime>2025-08-10 10:00:00</senttime>
-    <receivedtime>2025-08-10 10:00:01</receivedtime>
-  </message>
-</response>
-```
-
-`afterdownload=delete` removes messages from the Ozeki inbox after retrieval. Use `mark` or `untouch` if you want to keep them in Ozeki.
+OpenVox fills in the values (no `${}` syntax — the field name after `=` is the template variable). The app endpoint is `/api` and reads `from` (sender) and `text` (body).
 
 ---
 
@@ -591,7 +597,7 @@ When/if Ozeki exposes an address API, implement it in `app/ozeki.py` in the `lis
 
 ## Rebuilding the Database
 
-Since all data is derived from Ozeki, you can wipe and rebuild at any time:
+Since all data is derived from OpenVox, you can wipe and rebuild at any time:
 
 ```bash
 sudo mariadb -e "DROP DATABASE ozeki_app; CREATE DATABASE ozeki_app CHARACTER SET utf8mb4;"
@@ -741,7 +747,7 @@ ozeki/
 │   ├── main.py          # Flask app factory, blueprint registration, entry point
 │   ├── config.py        # Reads .env into module-level constants
 │   ├── database.py      # pymysql connection context manager (get_db)
-│   ├── ozeki.py         # Ozeki HTTP API client (send_message, poll_inbox, list_addresses)
+│   ├── ozeki.py         # OpenVox HTTP API client (send_message, list_addresses)
 │   ├── routes/
 │   │   ├── __init__.py
 │   │   ├── addresses.py # /addresses, /addresses/add, /addresses/sync
@@ -785,16 +791,34 @@ curl --noproxy '*' http://localhost:8000/health
 ```
 Browsers typically bypass the proxy for `localhost` automatically.
 
-### Ozeki rejects the message (`statuscode` ≠ 0)
-- Verify `OZEKI_BASE_URL`, `OZEKI_USERNAME`, `OZEKI_PASSWORD` in `.env`
-- Check the Ozeki admin panel for the HTTP API user's permissions
-- Confirm the `recipient` value matches an address or number Ozeki can reach
+### OpenVox rejects the message (app returns 502)
+- Verify `OPENVOX_BASE_URL`, `OPENVOX_USERNAME`, `OPENVOX_PASSWORD` in `.env`
+- Test the OpenVox send endpoint directly from the browser: `http://192.168.150.20/sendsms?username=smsuser&password=<pass>&phonenumber=254716046448&message=test`
+- The OpenVox device must be reachable from the machine running the app (not routed through the corporate proxy — this is handled automatically with `trust_env=False`)
 
 ### Inbound webhook not firing
-- Confirm Ozeki's HTTP Client user URL template is set correctly
-- The URL must be reachable from Ozeki's host — use ngrok if testing from WSL
-- Check `/tmp/ozeki-app.log` for incoming request logs
-- Test manually: `curl --noproxy '*' "http://localhost:8000/webhook/inbound?from=%2B41791234567&msg=2&msgid=test"`
+
+1. **Check app logs** — if no request from OpenVox appears, the device can't reach your machine:
+   ```bash
+   tail -f /tmp/ozeki-app.log
+   # Should show: GET /api?from=...&text=... when a reply arrives
+   ```
+2. **WSL port forwarding** — most common cause in WSL. Run in PowerShell as Administrator:
+   ```powershell
+   wsl hostname -I   # get WSL IP
+   netsh interface portproxy add v4tov4 listenport=8000 listenaddress=0.0.0.0 connectport=8000 connectaddress=<WSL_IP>
+   netsh advfirewall firewall add rule name="OpenVox SMS Port 8000" dir=in action=allow protocol=TCP localport=8000
+   ```
+3. **Verify from another machine** on the LAN:
+   ```bash
+   curl http://192.168.150.246:8000/health
+   # Must return: {"status":"ok"}
+   ```
+4. **Test the endpoint manually** (simulates an OpenVox push):
+   ```bash
+   curl --noproxy '*' "http://localhost:8000/api?from=%2B254702118106&text=2&port=1&channel=gsm-1.1"
+   ```
+5. **Check OpenVox config** — SMS → SMS Settings → SMS to HTTP must be enabled and the URL must use `/api` path with `from=phonenumber&text=message` params.
 
 ### Address sync does nothing
-Expected — the Ozeki address REST API is not yet confirmed. Add addresses manually via the form. See [Address Management](#address-management).
+Expected — OpenVox does not expose a REST API for listing addresses. Add addresses manually via the form. See [Address Management](#address-management).

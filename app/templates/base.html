@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Ozeki SMS{% endblock %}</title>
+  <title>{% block title %}OpenVox SMS{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
@@ -12,7 +12,7 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
 <header class="app-header" role="banner">
-  <a href="/addresses" class="app-header__brand" aria-label="Ozeki SMS — home">
+  <a href="/addresses" class="app-header__brand" aria-label="OpenVox SMS — home">
     <!--
       LOGO PLACEHOLDER
       Replace this <div> with:
@@ -26,28 +26,48 @@
     -->
     <div class="logo-placeholder" aria-hidden="true">LOGO</div>
     <div class="app-header__wordmark">
-      <span class="app-header__name">Ozeki SMS</span>
+      <span class="app-header__name">OpenVox SMS</span>
       <span class="app-header__context">Field Communication Gateway</span>
     </div>
   </a>
+</header>
 
-  <nav class="app-nav" aria-label="Primary navigation">
+<div class="app-shell">
+
+  <nav class="app-sidebar" aria-label="Primary navigation">
     <a href="/addresses"
-       class="app-nav__link"
+       class="sidebar-link{% if request.path == '/' or request.path.startswith('/addresses') or request.path.startswith('/messages') %} sidebar-link--active{% endif %}"
        {% if request.path == '/' or request.path.startswith('/addresses') or request.path.startswith('/messages') %}aria-current="page"{% endif %}>
+      <svg class="sidebar-link__icon" aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 4h12M2 8h12M2 12h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
       Addresses
     </a>
     <a href="/reports"
-       class="app-nav__link"
+       class="sidebar-link{% if request.path.startswith('/reports') %} sidebar-link--active{% endif %}"
        {% if request.path.startswith('/reports') %}aria-current="page"{% endif %}>
+      <svg class="sidebar-link__icon" aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="2" y="9" width="3" height="5" rx="1" fill="currentColor" opacity=".5"/>
+        <rect x="6.5" y="5" width="3" height="9" rx="1" fill="currentColor" opacity=".7"/>
+        <rect x="11" y="2" width="3" height="12" rx="1" fill="currentColor"/>
+      </svg>
       Reports
     </a>
   </nav>
-</header>
 
-<main class="app-main" id="main-content">
-  {% block content %}{% endblock %}
-</main>
+  <main class="app-main" id="main-content">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash-banner flash-banner--{{ category }}" role="alert">
+          <span>{{ message }}</span>
+          <button type="button" class="flash-banner__dismiss" aria-label="Dismiss" onclick="this.parentElement.remove()">×</button>
+        </div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
 
 </body>
 </html>

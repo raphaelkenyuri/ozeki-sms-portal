@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Addresses — Ozeki SMS{% endblock %}
+{% block title %}Addresses — OpenVox SMS{% endblock %}
 {% block content %}
 
 <div class="page-header">
   <p class="page-header__eyebrow">Gateway</p>
   <h1 class="page-header__title">Addresses &amp; Send</h1>
   <p class="page-header__desc">
-    Compose and dispatch SMS messages via the Ozeki gateway.
+    Compose and dispatch SMS messages via the OpenVox gateway.
     Recipients reply with a numeric code — responses are tracked on the
     <a href="/reports" style="color:var(--color-brand-primary);">Reports</a> page.
   </p>
@@ -25,7 +25,16 @@
     </div>
   </div>
 
-  <form method="POST" action="/messages/send" aria-label="Send SMS form">
+  <form method="POST" action="/messages/send" aria-label="Send SMS form"
+        onsubmit="
+          var m = document.getElementById('manual_ref').value.trim();
+          if (m) {
+            document.getElementById('address_ref').disabled = true;
+            var h = document.createElement('input');
+            h.type = 'hidden'; h.name = 'address_ref'; h.value = m;
+            this.appendChild(h);
+          }
+        ">
 
     <div class="form-group">
       <label class="form-label" for="address_ref">Saved address</label>
@@ -78,8 +87,8 @@
     </div>
 
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary" aria-label="Send message via Ozeki gateway">
-        Send via Ozeki
+      <button type="submit" class="btn btn-primary" aria-label="Send message via OpenVox gateway">
+        Send via OpenVox
       </button>
     </div>
 
@@ -94,15 +103,15 @@
       <p class="card__eyebrow">Registry</p>
       <h2 class="card__title" id="add-heading">Add Address</h2>
       <p class="card__subtitle">
-        Register the exact Ozeki reference for a group or contact so it appears in the send form.
+        Register the exact Address reference for a group or contact so it appears in the send form.
       </p>
     </div>
     <button type="button"
             class="btn btn-outline btn-sm"
             id="sync-btn"
-            aria-label="Synchronise addresses from Ozeki"
+            aria-label="Synchronise addresses from OpenVox"
             onclick="syncAddresses()">
-      Sync from Ozeki
+      Sync addresses
     </button>
   </div>
 
@@ -114,14 +123,14 @@
 
   <form method="POST" action="/addresses/add" aria-labelledby="add-heading">
     <div class="form-group">
-      <label class="form-label" for="ozeki_ref">Ozeki reference</label>
+      <label class="form-label" for="ozeki_ref">Address reference</label>
       <input type="text" class="form-control" id="ozeki_ref" name="ozeki_ref"
              required
              placeholder="e.g. field-team-north"
              aria-describedby="ref-hint"
              autocomplete="off">
       <span class="form-hint" id="ref-hint">
-        The address name exactly as registered in Ozeki — passed as
+        The address name exactly as registered in OpenVox — passed as
         <code>recipient</code> in the send API.
       </span>
     </div>
@@ -156,7 +165,7 @@
     <table aria-label="Cached addresses">
       <thead>
         <tr>
-          <th scope="col">Ozeki reference</th>
+          <th scope="col">Address reference</th>
           <th scope="col">Display name</th>
           <th scope="col">Last synced</th>
           <th scope="col" style="width:90px;text-align:center">Action</th>
@@ -184,7 +193,7 @@
   </div>
   {% else %}
   <div class="empty-state">
-    No addresses cached yet. Add one using the form above, or click "Sync from Ozeki".
+    No addresses cached yet. Add one using the form above, or click "Sync addresses".
   </div>
   {% endif %}
 </div>
@@ -210,7 +219,7 @@ function prefillSend(ref) {
   document.getElementById('send-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* Sync addresses from Ozeki (stub) */
+/* Sync addresses from OpenVox (stub) */
 function syncAddresses() {
   var btn    = document.getElementById('sync-btn');
   var banner = document.getElementById('sync-banner');
@@ -225,13 +234,13 @@ function syncAddresses() {
         d.total_cached + ' address' + (d.total_cached === 1 ? '' : 'es') +
         ' in cache. ' + (d.note || ''));
       btn.disabled = false;
-      btn.textContent = 'Sync from Ozeki';
+      btn.textContent = 'Sync addresses';
       setTimeout(function() { location.reload(); }, 2800);
     })
     .catch(function() {
       showBanner(banner, 'error', 'Sync failed. Check server logs for details.');
       btn.disabled = false;
-      btn.textContent = 'Sync from Ozeki';
+      btn.textContent = 'Sync addresses';
     });
 }
 

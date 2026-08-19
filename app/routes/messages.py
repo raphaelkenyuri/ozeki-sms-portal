@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, redirect, request, url_for
+from flask import Blueprint, flash, redirect, request, url_for
 
 from app.database import get_db
 from app import ozeki
@@ -14,7 +14,8 @@ def send_message():
     body = request.form.get("body", "").strip()
 
     if not address_ref or not body:
-        return "address_ref and body are required", 400
+        flash("Please enter a phone number and a message before sending.", "error")
+        return redirect(url_for("addresses.list_addresses"))
 
     result = ozeki.send_message(recipient=address_ref, messagedata=body)
 
@@ -29,12 +30,14 @@ def send_message():
                     address_ref,
                     body,
                     result.get("messageid") or None,
-                    result.get("statusmessage"),
+                    result.get("result"),
                     datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
                 ),
             )
 
-    if result.get("statuscode") != "0":
-        return jsonify({"error": "Ozeki rejected the message", "detail": result}), 502
+    if result.get("result") != "sending":
+        flash(f"OpenVox could not send the message to {address_ref}. Check gateway logs.", "error")
+        return redirect(url_for("addresses.list_addresses"))
 
+    flash(f"Message sent to {address_ref}.", "success")
     return redirect(url_for("addresses.list_addresses"))

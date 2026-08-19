@@ -1,15 +1,16 @@
 """
-Ozeki HTTP API client.
+OpenVox SMS Gateway HTTP API client.
 
-Confirmed API:
-  Send:  GET /api?action=sendmessage&username=U&password=P
-                 &recipient=R&messagetype=SMS:TEXT&messagedata=M
-         Response XML: <statuscode>, <statusmessage>, <messageid>, <recipient>
+Send:
+  GET /sendsms?username=U&password=P&phonenumber=N&message=M
+  Response JSON: {"message":"...", "report":[{"1":[{"port":"1",
+      "phonenumber":"...","time":"...","id":"null","result":"sending"}]}]}
+  Success: report[0]["1"][0]["result"] == "sending"
 
-  Poll:  GET /api?action=receivemessage&username=U&password=P
-                 &folder=inbox&limit=N&afterdownload=delete
-         Response XML per <message>: messageid, originator, recipient,
-                 messagetype, messagedata, senttime, receivedtime
+Receive (inbound):
+  OpenVox pushes GET requests to the configured callback URL when an SMS
+  arrives.  Configure on the device at SMS → SMS Settings → HTTP to SMS:
+    http://YOUR_HOST:8000/webhook/inbound?phonenumber=${phonenumber}&message=${message}&id=${id}&port=${port}&time=${time}
 
 Address listing: no confirmed REST endpoint — list_addresses() is a stub.
 """
@@ -24,42 +25,33 @@ from app import config
 
 log = logging.getLogger(__name__)
 
-_AUTH = {"username": config.OZEKI_USERNAME, "password": config.OZEKI_PASSWORD}
-
-
-def _base() -> str:
-    return config.OZEKI_BASE_URL.rstrip("/")
-
-
-def _parse_xml(text: str) -> etree._Element:
-    return etree.fromstring(text.encode())
-
 
 def send_message(recipient: str, messagedata: str, originator: Optional[str] = None) -> dict:
     params = {
-        **_AUTH,
-        "action": "sendmessage",
-        "recipient": recipient,
-        "messagetype": "SMS:TEXT",
-        "messagedata": messagedata,
-        "responseformat": "xml",
+        "username":    config.OPENVOX_USERNAME,
+        "password":    config.OPENVOX_PASSWORD,
+        "phonenumber": recipient,
+        "message":     messagedata,
     }
-    if originator:
-        params["originator"] = originator
-
-    resp = httpx.get(f"{_base()}/api", params=params, timeout=15)
+    # trust_env=False prevents the corporate HTTP_PROXY from intercepting
+    # requests to the OpenVox device on the local network.
+    with httpx.Client(trust_env=False) as client:
+        resp = client.get(
+            f"{config.OPENVOX_BASE_URL.rstrip('/')}/sendsms",
+            params=params,
+            timeout=15,
+        )
     resp.raise_for_status()
-    root = _parse_xml(resp.text)
-
-    def _text(tag: str) -> str:
-        el = root.find(tag)
-        return el.text.strip() if el is not None and el.text else ""
-
+    data = resp.json()
+    try:
+        entry = data["report"][0]["1"][0]
+    except (KeyError, IndexError, TypeError):
+        log.error("Unexpected OpenVox response: %s", data)
+        return {"result": "error", "messageid": None, "raw": data}
     return {
-        "statuscode": _text("statuscode"),
-        "statusmessage": _text("statusmessage"),
-        "messageid": _text("messageid"),
-        "recipient": _text("recipient"),
+        "result":    entry.get("result", ""),
+        "messageid": entry.get("id"),
+        "port":      entry.get("port", ""),
     }
 
 

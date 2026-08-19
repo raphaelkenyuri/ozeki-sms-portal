@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Reports — Ozeki SMS{% endblock %}
+{% block title %}Reports — OpenVox SMS{% endblock %}
 {% block content %}
 
 {% set ns = namespace(total=0, safe=0, unsafe=0, out=0) %}
@@ -19,8 +19,13 @@
   <h1 class="page-header__title">Reports</h1>
   <p class="page-header__desc">
     Inbound response breakdown and outbound message history.
-    Data updates in real time as replies arrive via the Ozeki webhook.
+    Data updates in real time as replies arrive via the OpenVox webhook.
   </p>
+  <div style="margin-top:var(--sp-4)">
+    <a href="/reports/export" class="btn btn-outline btn-sm">
+      ↓ Export to Excel
+    </a>
+  </div>
 </div>
 
 <!-- ─── Summary stats ─────────────────────────────────────────────────── -->
@@ -165,7 +170,7 @@
         <tr>
           <th scope="col">Recipient</th>
           <th scope="col">Message</th>
-          <th scope="col">Ozeki ID</th>
+          <th scope="col">OpenVox ID</th>
           <th scope="col">Status</th>
           <th scope="col">Sent at</th>
         </tr>
