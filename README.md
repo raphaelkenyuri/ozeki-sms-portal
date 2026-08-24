@@ -383,11 +383,21 @@ git push origin main
 ### 4. Pull updates on another machine
 
 ```bash
+cd ~/ozeki
 git pull origin main
 
-# Then run any new migration files that were added
+# Run any new migration files included in the pull
 sudo mariadb ozeki_app < ~/ozeki/migration_001_contacts.sql
+
+# Stop the running app, then restart it to load the new code
+pkill -f "app.main"
+nohup python3 -m app.main > /tmp/ozeki-app.log 2>&1 &
+echo "App restarted. Logs: tail -f /tmp/ozeki-app.log"
 ```
+
+> **Why restart?** Flask loads all Python files at startup. A `git pull` updates the files on disk but the running process continues to use the old code in memory. You must stop and restart the app for changes to take effect.
+
+> **Check it's running:** `curl --noproxy '*' http://localhost:8000/health` should return `{"status": "ok"}`.
 
 ### Commit message conventions
 
