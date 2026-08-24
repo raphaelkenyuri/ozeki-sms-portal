@@ -1,190 +1,181 @@
 {% extends "base.html" %}
-{% block title %}Addresses — OpenVox SMS{% endblock %}
+{% block title %}Contacts — Staff Count{% endblock %}
 {% block content %}
 
 <div class="page-header">
-  <p class="page-header__eyebrow">Gateway</p>
-  <h1 class="page-header__title">Addresses &amp; Send</h1>
+  <p class="page-header__eyebrow">Messaging</p>
+  <h1 class="page-header__title">Send &amp; Contacts</h1>
   <p class="page-header__desc">
-    Compose and dispatch SMS messages via the OpenVox gateway.
-    Recipients reply with a numeric code — responses are tracked on the
-    <a href="/reports" style="color:var(--color-brand-primary);">Reports</a> page.
+    Compose an SMS and send it to one or more recipients. Manage your contact book below.
+    Replies are tracked on the <a href="/reports" style="color:var(--color-brand-primary);">Reports</a> page.
   </p>
 </div>
 
-<!-- ─── PRIMARY: Send Message ─────────────────────────────────────────── -->
-<section class="card card--primary" id="send-form" aria-labelledby="send-heading">
+<!-- ─── Send Message ────────────────────────────────────────────────────── -->
+<section class="card card--primary" id="send-section" aria-labelledby="send-heading">
   <div class="card__header">
     <div class="card__heading-group">
       <p class="card__eyebrow">Outbound</p>
       <h2 class="card__title" id="send-heading">Send Message</h2>
       <p class="card__subtitle">
-        Select a saved address or enter a phone number directly, then compose your message.
-        Replies of 2 = Safe · 3 = Unsafe · 4 = Out of country.
+        Add recipients by typing a number or picking from your contacts. Replies:
+        2&nbsp;=&nbsp;Safe · 3&nbsp;=&nbsp;Unsafe · 4&nbsp;=&nbsp;Out of country.
       </p>
     </div>
   </div>
 
-  <form method="POST" action="/messages/send" aria-label="Send SMS form"
-        onsubmit="
-          var m = document.getElementById('manual_ref').value.trim();
-          if (m) {
-            document.getElementById('address_ref').disabled = true;
-            var h = document.createElement('input');
-            h.type = 'hidden'; h.name = 'address_ref'; h.value = m;
-            this.appendChild(h);
-          }
-        ">
+  <form method="POST" action="/messages/send" id="send-form"
+        aria-label="Send SMS form" onsubmit="return prepareSubmit()">
 
+    <!-- Recipient chip input -->
     <div class="form-group">
-      <label class="form-label" for="address_ref">Saved address</label>
-      <select class="form-control" id="address_ref" name="address_ref"
-              aria-describedby="address-hint"
-              onchange="document.getElementById('manual_ref').value = ''">
-        <option value="" disabled selected>— select a saved address —</option>
-        {% for a in addresses %}
-        <option value="{{ a.ozeki_ref }}">{{ a.name or a.ozeki_ref }}</option>
+      <label class="form-label" for="chip-field">Recipients</label>
+      <div class="chip-input" id="chip-input" onclick="document.getElementById('chip-field').focus()">
+        <!-- chips injected here by JS -->
+        <input type="text" class="chip-input__field" id="chip-field"
+               placeholder="Type number, press Enter or comma to add…"
+               autocomplete="off" inputmode="tel"
+               aria-label="Type a phone number and press Enter or comma to add it">
+      </div>
+      <!-- hidden inputs, one per chip, injected by JS -->
+      <div id="recipients-container"></div>
+      <span class="form-hint">International format e.g. +41791234567. Backspace removes the last chip.</span>
+    </div>
+
+    <!-- Contact quick-pick -->
+    {% if contacts %}
+    <div class="form-or" role="separator">or pick from contacts</div>
+    <div class="form-group">
+      <input type="text" class="form-control" id="contact-search"
+             placeholder="Search contacts…" autocomplete="off"
+             aria-label="Search contacts to add as recipients"
+             oninput="filterPicker(this.value)">
+      <div class="contact-picker" id="contact-picker" role="listbox"
+           aria-label="Contact list — click to add as recipient">
+        {% for c in contacts %}
+        <button type="button" class="contact-picker__item"
+                role="option" aria-selected="false"
+                data-phone="{{ c.phone_number | e }}"
+                data-name="{{ c.name | e }}"
+                data-search="{{ (c.name ~ ' ' ~ c.phone_number ~ ' ' ~ (c.group_tag or '')) | lower | e }}">
+          <span class="contact-picker__name">{{ c.name }}</span>
+          <span class="contact-picker__phone">{{ c.phone_number }}</span>
+          {% if c.group_tag %}
+          <span class="contact-picker__group">{{ c.group_tag }}</span>
+          {% endif %}
+        </button>
         {% endfor %}
-      </select>
-      <span class="form-hint" id="address-hint">
-        Select from the registered address list, or use a direct number below.
-      </span>
+      </div>
     </div>
+    {% endif %}
 
-    <div class="form-or" role="separator" aria-label="or">or</div>
-
-    <div class="form-group">
-      <label class="form-label" for="manual_ref">Phone number directly</label>
-      <input type="tel" class="form-control" id="manual_ref"
-             placeholder="+41 79 123 45 67"
-             aria-describedby="phone-hint"
-             autocomplete="off"
-             oninput="
-               var sel = document.getElementById('address_ref');
-               sel.value = this.value;
-             ">
-      <span class="form-hint" id="phone-hint">
-        International format (e.g. +41791234567). Overrides the selection above.
-      </span>
-    </div>
-
+    <!-- Message body -->
     <div class="form-group">
       <label class="form-label" for="body">Message</label>
       <textarea class="form-control" id="body" name="body"
                 required maxlength="160"
                 placeholder="Reply 2 for Safe · 3 for Unsafe · 4 for Out of the country"
                 aria-describedby="char-hint"
-                oninput="
-                  var n = this.value.length;
-                  var span = document.getElementById('char-count');
-                  var counter = document.getElementById('char-hint');
-                  span.textContent = n;
-                  counter.className = 'char-counter' + (n > 140 ? ' char-counter--warn' : '');
-                "></textarea>
+                oninput="updateCharCount(this)"></textarea>
       <div class="char-counter" id="char-hint" aria-live="polite">
         <span id="char-count">0</span> / 160 characters
       </div>
     </div>
 
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary" aria-label="Send message via OpenVox gateway">
-        Send via OpenVox
+      <button type="submit" class="btn btn-primary" id="send-btn" disabled
+              aria-label="Send SMS message">
+        Send to <span id="recipient-count">0</span> recipient(s)
       </button>
     </div>
 
   </form>
 </section>
 
-<!-- ─── SECONDARY: Address management ────────────────────────────────── -->
-
-<div class="card">
+<!-- ─── Contact Book ─────────────────────────────────────────────────────── -->
+<div class="card" id="contacts-section">
   <div class="card__header">
     <div class="card__heading-group">
-      <p class="card__eyebrow">Registry</p>
-      <h2 class="card__title" id="add-heading">Add Address</h2>
+      <p class="card__eyebrow">Directory</p>
+      <h2 class="card__title" id="contacts-heading">Contact Book</h2>
       <p class="card__subtitle">
-        Register the exact Address reference for a group or contact so it appears in the send form.
+        Add recipients here. Click any contact above to include them in the next message.
       </p>
     </div>
-    <button type="button"
-            class="btn btn-outline btn-sm"
-            id="sync-btn"
-            aria-label="Synchronise addresses from OpenVox"
-            onclick="syncAddresses()">
-      Sync addresses
-    </button>
+    <div style="display:flex;gap:var(--sp-2);align-items:center;flex-shrink:0">
+      {% if contacts %}
+      <span class="count-badge" aria-label="{{ contacts | length }} contacts">
+        {{ contacts | length }} contact{{ 's' if contacts | length != 1 }}
+      </span>
+      {% endif %}
+      <button type="button" class="btn btn-outline btn-sm" disabled
+              aria-disabled="true" title="Coming soon — waiting for Excel template">
+        Import from Excel
+        <span class="badge-soon">Soon</span>
+      </button>
+    </div>
   </div>
 
-  <div id="sync-banner"
-       role="status"
-       aria-live="polite"
-       aria-atomic="true"
-       hidden></div>
-
-  <form method="POST" action="/addresses/add" aria-labelledby="add-heading">
-    <div class="form-group">
-      <label class="form-label" for="ozeki_ref">Address reference</label>
-      <input type="text" class="form-control" id="ozeki_ref" name="ozeki_ref"
-             required
-             placeholder="e.g. field-team-north"
-             aria-describedby="ref-hint"
-             autocomplete="off">
-      <span class="form-hint" id="ref-hint">
-        The address name exactly as registered in OpenVox — passed as
-        <code>recipient</code> in the send API.
-      </span>
+  <!-- Add contact -->
+  <form method="POST" action="/contacts/add" aria-labelledby="contacts-heading"
+        style="margin-bottom:var(--sp-6)">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-3)">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_name">Name</label>
+        <input type="text" class="form-control" id="c_name" name="name"
+               required placeholder="Alice Smith" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_phone">Phone number</label>
+        <input type="tel" class="form-control" id="c_phone" name="phone_number"
+               required placeholder="+41791234567" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_group">
+          Group <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="c_group" name="group_tag"
+               placeholder="e.g. Field Team North" autocomplete="off">
+      </div>
     </div>
-    <div class="form-group">
-      <label class="form-label" for="name">
-        Display name <span class="form-label__opt">(optional)</span>
-      </label>
-      <input type="text" class="form-control" id="name" name="name"
-             placeholder="e.g. Field Team North">
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary btn-sm">Add address</button>
+    <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
+      <button type="submit" class="btn btn-primary btn-sm">Add contact</button>
     </div>
   </form>
-</div>
 
-<div class="card">
-  <div class="card__header">
-    <div class="card__heading-group">
-      <p class="card__eyebrow">Cache</p>
-      <h2 class="card__title">Cached Addresses</h2>
-    </div>
-    {% if addresses %}
-    <span class="count-badge" aria-label="{{ addresses | length }} addresses registered">
-      {{ addresses | length }} registered
-    </span>
-    {% endif %}
+  {% if contacts %}
+  <!-- Table filter -->
+  <div class="form-group" style="margin-bottom:var(--sp-4)">
+    <input type="text" class="form-control" id="contact-table-search"
+           placeholder="Filter contacts by name, number or group…"
+           autocomplete="off" aria-label="Filter contact list"
+           oninput="filterContactTable(this.value)">
   </div>
 
-  {% if addresses %}
   <div class="table-wrapper">
-    <table aria-label="Cached addresses">
+    <table aria-label="Contact list" id="contact-table">
       <thead>
         <tr>
-          <th scope="col">Address reference</th>
-          <th scope="col">Display name</th>
-          <th scope="col">Last synced</th>
-          <th scope="col" style="width:90px;text-align:center">Action</th>
+          <th scope="col">Name</th>
+          <th scope="col">Phone</th>
+          <th scope="col">Group</th>
+          <th scope="col" style="width:80px;text-align:center">Remove</th>
         </tr>
       </thead>
       <tbody>
-      {% for a in addresses %}
-        <tr>
-          <td><code>{{ a.ozeki_ref }}</code></td>
-          <td>{{ a.name or '—' }}</td>
-          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs)">
-            {{ a.last_synced }}
-          </td>
+      {% for c in contacts %}
+        <tr data-name="{{ c.name | lower | e }}"
+            data-phone="{{ c.phone_number | e }}"
+            data-group="{{ (c.group_tag or '') | lower | e }}">
+          <td>{{ c.name }}</td>
+          <td><code>{{ c.phone_number }}</code></td>
+          <td style="color:var(--color-text-muted)">{{ c.group_tag or '—' }}</td>
           <td style="text-align:center">
-            <button class="btn btn-outline btn-sm"
-                    aria-label="Pre-fill send form with {{ a.name or a.ozeki_ref }}"
-                    onclick="prefillSend('{{ a.ozeki_ref | e }}')">
-              Send
-            </button>
+            <form method="POST" action="/contacts/delete/{{ c.id }}" style="display:inline"
+                  onsubmit="return confirm('Remove {{ c.name | e }}?')">
+              <button type="submit" class="btn btn-outline btn-sm"
+                      aria-label="Remove {{ c.name | e }} from contacts">&times;</button>
+            </form>
           </td>
         </tr>
       {% endfor %}
@@ -192,72 +183,147 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">
-    No addresses cached yet. Add one using the form above, or click "Sync addresses".
-  </div>
+  <div class="empty-state">No contacts yet — add one using the form above.</div>
   {% endif %}
 </div>
 
 <script>
-/* Pre-fill the send form from a table row action */
-function prefillSend(ref) {
-  var sel = document.getElementById('address_ref');
-  var matched = false;
-  for (var i = 0; i < sel.options.length; i++) {
-    if (sel.options[i].value === ref) {
-      sel.selectedIndex = i;
-      matched = true;
-      break;
+/* ── State ──────────────────────────────────────────────────────────────── */
+var chips = [];   /* [{phone: string, label: string}] */
+
+/* ── Chip management ────────────────────────────────────────────────────── */
+function addChip(phone, label) {
+  phone = (phone || '').trim();
+  if (!phone) return;
+  if (chips.some(function(c) { return c.phone === phone; })) return;
+  chips.push({ phone: phone, label: label || phone });
+  renderChips();
+  updateSendButton();
+  markPickerItem(phone, true);
+}
+
+function removeChip(phone) {
+  chips = chips.filter(function(c) { return c.phone !== phone; });
+  renderChips();
+  updateSendButton();
+  markPickerItem(phone, false);
+}
+
+function renderChips() {
+  var container = document.getElementById('chip-input');
+  var field = document.getElementById('chip-field');
+  container.querySelectorAll('.chip').forEach(function(el) { el.remove(); });
+
+  chips.forEach(function(c) {
+    var chip = document.createElement('span');
+    chip.className = 'chip';
+
+    var lbl = document.createElement('span');
+    lbl.className = 'chip__label';
+    lbl.title = c.phone;
+    lbl.textContent = c.label;
+
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip__remove';
+    btn.setAttribute('aria-label', 'Remove ' + c.label);
+    btn.textContent = '×';
+    btn.dataset.phone = c.phone;
+    btn.addEventListener('click', function() { removeChip(this.dataset.phone); });
+
+    chip.appendChild(lbl);
+    chip.appendChild(btn);
+    container.insertBefore(chip, field);
+  });
+
+  /* sync hidden inputs */
+  var hc = document.getElementById('recipients-container');
+  hc.innerHTML = '';
+  chips.forEach(function(c) {
+    var inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'recipients[]';
+    inp.value = c.phone;
+    hc.appendChild(inp);
+  });
+}
+
+function updateSendButton() {
+  var btn = document.getElementById('send-btn');
+  var countSpan = document.getElementById('recipient-count');
+  countSpan.textContent = chips.length;
+  btn.disabled = chips.length === 0;
+}
+
+function markPickerItem(phone, added) {
+  document.querySelectorAll('.contact-picker__item').forEach(function(el) {
+    if (el.dataset.phone === phone) {
+      el.classList.toggle('contact-picker__item--added', added);
+      el.setAttribute('aria-selected', added ? 'true' : 'false');
     }
-  }
-  if (!matched) {
-    /* address in cache but not in select — set value directly as fallback */
-    sel.value = ref;
-  }
-  /* clear the phone number override so the select is used */
-  document.getElementById('manual_ref').value = '';
-  document.getElementById('send-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 }
 
-/* Sync addresses from OpenVox (stub) */
-function syncAddresses() {
-  var btn    = document.getElementById('sync-btn');
-  var banner = document.getElementById('sync-banner');
+/* ── Chip field keyboard handler ────────────────────────────────────────── */
+document.getElementById('chip-field').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    var val = this.value.trim().replace(/,/g, '');
+    if (val) { addChip(val, val); this.value = ''; }
+  } else if (e.key === 'Backspace' && this.value === '' && chips.length > 0) {
+    removeChip(chips[chips.length - 1].phone);
+  }
+});
 
-  btn.disabled = true;
-  btn.textContent = 'Syncing…';
+/* ── Contact picker click ────────────────────────────────────────────────── */
+document.querySelectorAll('.contact-picker__item').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var phone = this.dataset.phone;
+    var name  = this.dataset.name;
+    if (this.classList.contains('contact-picker__item--added')) {
+      removeChip(phone);
+    } else {
+      addChip(phone, name || phone);
+    }
+  });
+});
 
-  fetch('/addresses/sync', { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      showBanner(banner, 'info',
-        d.total_cached + ' address' + (d.total_cached === 1 ? '' : 'es') +
-        ' in cache. ' + (d.note || ''));
-      btn.disabled = false;
-      btn.textContent = 'Sync addresses';
-      setTimeout(function() { location.reload(); }, 2800);
-    })
-    .catch(function() {
-      showBanner(banner, 'error', 'Sync failed. Check server logs for details.');
-      btn.disabled = false;
-      btn.textContent = 'Sync addresses';
-    });
+/* ── Contact picker search ──────────────────────────────────────────────── */
+function filterPicker(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.contact-picker__item').forEach(function(el) {
+    var s = el.dataset.search || '';
+    el.style.display = (!q || s.includes(q)) ? '' : 'none';
+  });
 }
 
-function showBanner(el, type, msg) {
-  el.className = 'status-banner status-banner--' + type;
-  var text = document.createElement('span');
-  text.className = 'status-banner__text';
-  text.textContent = msg;
-  var dismiss = document.createElement('button');
-  dismiss.className = 'status-banner__dismiss';
-  dismiss.setAttribute('aria-label', 'Dismiss notification');
-  dismiss.textContent = '×';
-  dismiss.onclick = function() { el.hidden = true; };
-  el.innerHTML = '';
-  el.appendChild(text);
-  el.appendChild(dismiss);
-  el.hidden = false;
+/* ── Contact table filter ───────────────────────────────────────────────── */
+function filterContactTable(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#contact-table tbody tr').forEach(function(row) {
+    var name  = row.dataset.name  || '';
+    var phone = row.dataset.phone || '';
+    var group = row.dataset.group || '';
+    row.style.display = (!q || name.includes(q) || phone.includes(q) || group.includes(q))
+      ? '' : 'none';
+  });
+}
+
+/* ── Char counter ───────────────────────────────────────────────────────── */
+function updateCharCount(el) {
+  var n = el.value.length;
+  document.getElementById('char-count').textContent = n;
+  document.getElementById('char-hint').className =
+    'char-counter' + (n > 140 ? ' char-counter--warn' : '');
+}
+
+/* ── Form submit guard ──────────────────────────────────────────────────── */
+function prepareSubmit() {
+  if (chips.length === 0) {
+    alert('Add at least one recipient before sending.');
+    return false;
+  }
+  return true;
 }
 </script>
 

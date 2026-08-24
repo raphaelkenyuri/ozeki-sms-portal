@@ -1,5 +1,4 @@
--- Ozeki SMS Gateway MVP — cache/reporting schema
--- All tables are derived from Ozeki; any table can be dropped and rebuilt by re-syncing.
+-- SMS Gateway — cache/reporting schema
 
 CREATE TABLE IF NOT EXISTS response_codes (
     code  INT          PRIMARY KEY,
@@ -24,6 +23,16 @@ CREATE TABLE IF NOT EXISTS address_members (
     phone_number     VARCHAR(30)  NOT NULL,
     name             VARCHAR(255),
     UNIQUE KEY uq_addr_phone (address_ozeki_ref, phone_number)
+);
+
+CREATE TABLE IF NOT EXISTS contacts (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    name         VARCHAR(255)  NOT NULL,
+    phone_number VARCHAR(30)   NOT NULL,
+    group_tag    VARCHAR(100)  DEFAULT NULL,
+    notes        VARCHAR(500)  DEFAULT NULL,
+    created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_contacts_phone (phone_number)
 );
 
 CREATE TABLE IF NOT EXISTS outbound_messages (
