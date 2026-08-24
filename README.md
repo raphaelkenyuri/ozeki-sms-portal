@@ -19,6 +19,8 @@ A lightweight Python/Flask web application that integrates with an **OpenVox GSM
   - [5. Run the app](#5-run-the-app)
 - [Accessing the App](#accessing-the-app)
 - [Deploy from GitHub](#deploy-from-github)
+- [Running Database Migrations](#running-database-migrations)
+- [Pushing Changes to GitHub](#pushing-changes-to-github)
 - [Exposing the Webhook (ngrok)](#exposing-the-webhook-ngrok)
 - [Configuring OpenVox](#configuring-openvox)
   - [Outbound send (sendsms)](#outbound-send-sendsms)
@@ -28,7 +30,7 @@ A lightweight Python/Flask web application that integrates with an **OpenVox GSM
 - [Environment Variables](#environment-variables)
 - [OpenVox HTTP API Reference](#openvox-http-api-reference)
 - [Response Code Mapping](#response-code-mapping)
-- [Address Management](#address-management)
+- [Contact Book](#contact-book)
 - [Rebuilding the Database](#rebuilding-the-database)
 - [Docker Deployment](#docker-deployment)
   - [Files](#files)
@@ -242,7 +244,7 @@ http://localhost:8000
 
 > **Corporate proxy note (ICRC/managed laptops):** If `http_proxy` is set in your environment, curl and some tools will route local requests through the proxy and fail. Use `--noproxy '*'` with curl, or just open the URL directly in a browser (browsers typically bypass the proxy for localhost automatically).
 
-The app redirects `/` → `/addresses`, so you land on the address list immediately.
+The app redirects `/` → `/contacts`, so you land on the contacts and send page immediately.
 
 ---
 
@@ -314,7 +316,90 @@ curl --noproxy '*' http://localhost:8000/health
 # Expected: {"status": "ok"}
 ```
 
-Then open `http://localhost:8000` in a browser — you should land on the address list.
+Then open `http://localhost:8000` in a browser — you should land on the contacts page.
+
+---
+
+## Running Database Migrations
+
+When a new version of the app adds database tables or columns, a numbered migration file is included in the project root (e.g. `migration_001_contacts.sql`). Run each migration once against your existing database — they use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` so they are safe to re-run.
+
+### Run a migration
+
+```bash
+sudo mariadb ozeki_app < ~/ozeki/migration_001_contacts.sql
+```
+
+### Verify it applied
+
+```bash
+sudo mariadb ozeki_app -e "DESCRIBE contacts;"
+```
+
+### Migration history
+
+| File | What it adds |
+|---|---|
+| `schema.sql` | Full baseline schema — run on a **fresh** database only |
+| `migration_001_contacts.sql` | `contacts` table — standalone address book (name, phone, group) |
+
+> **Rule:** Always run migrations in order. Never run `schema.sql` against an existing database that already has data — it only creates tables that don't exist yet, but `schema.sql` is intended for fresh installs. For an existing database, use only the numbered migration files.
+
+---
+
+## Pushing Changes to GitHub
+
+The repository is hosted at `https://github.com/raphaelkenyuri/ozeki-sms-portal`. Use the standard git workflow:
+
+### 1. Check what changed
+
+```bash
+cd ~/ozeki
+git status        # see modified / untracked files
+git diff          # see line-by-line changes
+```
+
+### 2. Stage and commit
+
+```bash
+# Stage specific files (preferred — avoids accidentally committing .env)
+git add app/routes/contacts.py app/templates/index.html app/static/app.css
+
+# Or stage all tracked changes (never commit .env this way)
+git add -p        # interactive — review each hunk before staging
+
+# Commit with a clear message
+git commit -m "feat: describe what you changed"
+```
+
+> **Never commit `.env`** — it contains secrets. It is listed in `.gitignore` but double-check with `git status` before pushing.
+
+### 3. Push
+
+```bash
+git push origin main
+```
+
+### 4. Pull updates on another machine
+
+```bash
+git pull origin main
+
+# Then run any new migration files that were added
+sudo mariadb ozeki_app < ~/ozeki/migration_001_contacts.sql
+```
+
+### Commit message conventions
+
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/):
+
+| Prefix | Use for |
+|---|---|
+| `feat:` | New feature or capability |
+| `fix:` | Bug fix |
+| `docs:` | README or comment changes only |
+| `refactor:` | Code restructuring with no behaviour change |
+| `chore:` | Dependencies, config, tooling |
 
 ---
 
@@ -420,21 +505,36 @@ Replace `192.168.150.246` with your Windows machine's LAN IP. The path `/api` an
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/` | Redirects to `/addresses` |
+| `GET` | `/` | Redirects to `/contacts` |
 | `GET` | `/health` | Returns `{"status": "ok"}` — for monitoring |
-| `GET` | `/addresses` | Address list page (from DB cache) + send form |
-| `POST` | `/addresses/add` | Manually add an address to the local cache |
-| `POST` | `/addresses/sync` | Attempt to pull addresses from Ozeki (stub — see [Address Management](#address-management)) |
-| `POST` | `/messages/send` | Send a message via OpenVox; stores message ID |
-| `GET` | `/api` | Primary inbound SMS webhook (OpenVox native params: `from`, `text`) |
+| `GET` | `/contacts` | Contact book + multi-recipient send form |
+| `POST` | `/contacts/add` | Add or update a contact (name, phone, group) |
+| `POST` | `/contacts/delete/<id>` | Remove a contact by ID |
+| `POST` | `/messages/send` | Send to one or more recipients (`recipients[]`); logs each separately |
+| `GET` | `/api` | Primary inbound SMS webhook (OpenVox params: `from`, `text`) |
 | `GET` | `/webhook/inbound` | Alias for `/api` (legacy path) |
 | `GET` | `/reports` | Reporting page: by-code + by-sender breakdowns |
+| `GET` | `/reports/export` | Download Excel export of the report |
 
 ---
 
 ## Database Schema
 
-All tables are **cache/reporting only**. Ozeki is the source of truth. Any table can be dropped and rebuilt.
+The database has two categories of tables: **application data** (contacts — managed in the app, source of truth) and **cache/reporting** (messages and responses derived from gateway activity).
+
+### `contacts` _(added in migration_001)_
+The standalone address book. Managed entirely within the app — not synced from the gateway.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INT PK | |
+| `name` | VARCHAR(255) | Display name (required) |
+| `phone_number` | VARCHAR(30) UNIQUE | International format, e.g. `+41791234567` (required) |
+| `group_tag` | VARCHAR(100) | Optional group label, e.g. `Field Team North` |
+| `notes` | VARCHAR(500) | Optional free-text note |
+| `created_at` | DATETIME | Set automatically on insert |
+
+---
 
 ### `response_codes`
 Lookup table for translating numeric SMS replies to human-readable labels.
@@ -570,28 +670,32 @@ If a message contains no digit, `response_code` and `translated_status` are stor
 
 ---
 
-## Address Management
+## Contact Book
 
-**Ozeki does not expose a confirmed REST API for listing or managing addresses.** The "Sync from Ozeki" button is a stub — it logs a warning and returns an empty list.
+The app has a built-in address book at `/contacts`. Contacts are managed entirely within the app — they are not synced from the gateway.
 
-### Current workflow (manual)
+### Add a contact
 
-1. Go to `/addresses`
-2. Use the **Add address** form to enter an address
-3. Set **Ozeki ref** to the exact address name as it appears in Ozeki (this is what gets passed as `recipient` in the send API)
-4. Optionally set a display name
+1. Go to `/contacts`
+2. Fill in **Name** (required), **Phone number** (required, international format e.g. `+41791234567`), and optionally a **Group** label
+3. Click **Add contact** — the contact appears in the list immediately
 
-### Sending to a phone number directly
+Adding a contact with the same phone number as an existing one updates the name and group (upsert — no duplicate error).
 
-The send form also accepts a raw phone number in international format (e.g. `+41791234567`). Type it in the "Or type a phone number directly" field — it overrides the address dropdown.
+### Send to multiple recipients
 
-### Sending to a group
+The send form uses a chip-based multi-recipient picker:
 
-If Ozeki's address names map to groups/lists (expanding to multiple recipients), pass the group name as `recipient`. Whether Ozeki expands it depends on your Ozeki version and connection type — **verify with a live test** on your instance.
+- **Type a number** in the recipients field and press **Enter** or **comma** → it becomes a chip
+- **Click a contact** in the picker list below the search box → it becomes a chip
+- **Remove a chip** by clicking × or pressing Backspace when the field is empty
+- Add as many recipients as needed, then compose your message and click **Send**
 
-### v2: Implement address sync
+Each recipient is sent to independently and logged as a separate row in `outbound_messages`.
 
-When/if Ozeki exposes an address API, implement it in `app/ozeki.py` in the `list_addresses()` function. The rest of the sync path is already wired up.
+### Import from Excel _(coming soon)_
+
+The "Import from Excel" button is visible but disabled pending an agreed template. Once the template is finalised, a `/contacts/import` route will process the upload and bulk-insert contacts.
 
 ---
 
@@ -750,19 +854,21 @@ ozeki/
 │   ├── ozeki.py         # OpenVox HTTP API client (send_message, list_addresses)
 │   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── addresses.py # /addresses, /addresses/add, /addresses/sync
-│   │   ├── messages.py  # /messages/send
-│   │   ├── webhook.py   # /webhook/inbound
-│   │   └── reports.py   # /reports
+│   │   ├── addresses.py # /addresses/* (legacy, kept for backward compat)
+│   │   ├── contacts.py  # /contacts, /contacts/add, /contacts/delete/<id>
+│   │   ├── messages.py  # /messages/send (multi-recipient loop)
+│   │   ├── webhook.py   # /api, /webhook/inbound
+│   │   └── reports.py   # /reports, /reports/export
 │   └── templates/
-│       ├── base.html    # Shared layout, nav, CSS
-│       ├── index.html   # Address list + send form
-│       └── report.html  # Response breakdown tables
+│       ├── base.html    # Shared layout, sidebar nav, flash banners
+│       ├── index.html   # Contact book + chip-based send form
+│       └── report.html  # Response breakdown tables + Excel export
 ├── Dockerfile               # Container image (python:3.11-slim + pip install)
 ├── docker-compose.yml       # App + MariaDB 11 services
 ├── requirements-docker.txt  # Pinned pip deps for Docker image
 ├── .dockerignore
-├── schema.sql               # MariaDB DDL + seed data
+├── schema.sql               # Full baseline DDL (fresh installs only)
+├── migration_001_contacts.sql  # Adds contacts table (run on existing DBs)
 ├── start.sh                 # Native and Docker start/stop helper
 ├── package.sh               # Bundles project into ozeki-sms-app.tar.gz
 ├── .env.example             # Environment variable template
