@@ -51,5 +51,59 @@ CREATE TABLE IF NOT EXISTS inbound_responses (
     response_code     INT,
     translated_status VARCHAR(50),
     received_at       DATETIME     NOT NULL,
+    campaign_id       INT          DEFAULT NULL,
     FOREIGN KEY (response_code) REFERENCES response_codes(code)
 );
+
+-- ── Campaigns ────────────────────────────────────────────────────────────────
+-- Each send creates one campaign row. Outbound messages and inbound responses
+-- are linked to it so per-campaign reporting and deduplication are possible.
+
+CREATE TABLE IF NOT EXISTS campaigns (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    body            TEXT         NOT NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recipient_count INT          NOT NULL DEFAULT 0
+);
+
+ALTER TABLE outbound_messages
+    ADD COLUMN IF NOT EXISTS campaign_id     INT DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(50) DEFAULT NULL;
+
+ALTER TABLE outbound_messages
+    ADD CONSTRAINT IF NOT EXISTS fk_outbound_campaign
+        FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
+
+ALTER TABLE inbound_responses
+    ADD CONSTRAINT IF NOT EXISTS fk_inbound_campaign
+        FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
+
+-- ── Contacts — extended fields ───────────────────────────────────────────────
+
+ALTER TABLE contacts
+    ADD COLUMN IF NOT EXISTS site         VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS department   VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS email        VARCHAR(255) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS line_manager VARCHAR(255) DEFAULT NULL;
+
+-- ── Groups ───────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS `groups` (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(500) DEFAULT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS contact_groups (
+    contact_id INT NOT NULL,
+    group_id   INT NOT NULL,
+    PRIMARY KEY (contact_id, group_id),
+    FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id)   REFERENCES `groups`(id) ON DELETE CASCADE
+);
+
+-- ── Indexes ──────────────────────────────────────────────────────────────────
+
+CREATE INDEX IF NOT EXISTS idx_inbound_campaign  ON inbound_responses (campaign_id, from_number, received_at);
+CREATE INDEX IF NOT EXISTS idx_outbound_campaign ON outbound_messages  (campaign_id);

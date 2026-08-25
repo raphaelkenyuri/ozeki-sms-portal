@@ -38,7 +38,7 @@ def reports():
 
             cur.execute(
                 """
-                SELECT address_ref, body, ozeki_msg_id, status, sent_at
+                SELECT address_ref, body, ozeki_msg_id, status, delivery_status, sent_at, campaign_id
                 FROM outbound_messages
                 ORDER BY sent_at DESC
                 LIMIT 50
@@ -46,7 +46,29 @@ def reports():
             )
             outbound = cur.fetchall()
 
-    return render_template("report.html", by_code=by_code, by_address=by_address, outbound=outbound)
+            cur.execute(
+                """
+                SELECT c.id, c.body, c.created_at, c.recipient_count,
+                       COUNT(DISTINCT o.id) AS sent_count,
+                       SUM(CASE WHEN o.delivery_status = 'DELIVERED' THEN 1 ELSE 0 END) AS delivered_count,
+                       COUNT(DISTINCT ir.from_number) AS responded_count
+                FROM campaigns c
+                LEFT JOIN outbound_messages o  ON o.campaign_id = c.id
+                LEFT JOIN inbound_responses ir ON ir.campaign_id = c.id
+                GROUP BY c.id
+                ORDER BY c.created_at DESC
+                LIMIT 20
+                """
+            )
+            campaigns = cur.fetchall()
+
+    return render_template(
+        "report.html",
+        by_code=by_code,
+        by_address=by_address,
+        outbound=outbound,
+        campaigns=campaigns,
+    )
 
 
 @bp.get("/reports/export")
@@ -66,7 +88,7 @@ def export_excel():
 
             cur.execute(
                 """
-                SELECT address_ref, body, ozeki_msg_id, status, sent_at
+                SELECT address_ref, body, ozeki_msg_id, status, delivery_status, sent_at, campaign_id
                 FROM outbound_messages
                 ORDER BY sent_at DESC
                 LIMIT 500
@@ -104,7 +126,7 @@ def export_excel():
 
     # Sheet 2: Outbound messages
     ws2 = wb.create_sheet("Outbound Messages")
-    ws2.append(["Recipient", "Message", "Message ID", "Status", "Sent At"])
+    ws2.append(["Recipient", "Message", "Message ID", "Send Status", "Delivery Status", "Sent At", "Campaign ID"])
     for cell in ws2[1]:
         cell.font = header_font
         cell.fill = header_fill
@@ -115,13 +137,17 @@ def export_excel():
             row["body"],
             row["ozeki_msg_id"] or "",
             row["status"] or "",
+            row["delivery_status"] or "",
             str(row["sent_at"]) if row["sent_at"] else "",
+            row["campaign_id"] or "",
         ])
     ws2.column_dimensions["A"].width = 18
     ws2.column_dimensions["B"].width = 40
     ws2.column_dimensions["C"].width = 16
-    ws2.column_dimensions["D"].width = 12
-    ws2.column_dimensions["E"].width = 22
+    ws2.column_dimensions["D"].width = 14
+    ws2.column_dimensions["E"].width = 16
+    ws2.column_dimensions["F"].width = 22
+    ws2.column_dimensions["G"].width = 12
 
     buf = io.BytesIO()
     wb.save(buf)

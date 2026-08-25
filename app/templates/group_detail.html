@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} | Staff Count{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Groups</p>
+  <h1 class="page-header__title">{{ group.name }}</h1>
+  {% if group.description %}
+  <p class="page-header__desc">{{ group.description }}</p>
+  {% endif %}
+  <div style="margin-top:var(--sp-4)">
+    <a href="/groups" class="btn btn-outline btn-sm">← Back to groups</a>
+  </div>
+</div>
+
+<!-- ─── Add members ───────────────────────────────────────────────────────── -->
+{% if non_members %}
+<div class="card card--primary">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Add</p>
+      <h2 class="card__title">Add contacts to this group</h2>
+      <p class="card__subtitle">Hold Ctrl/Cmd to select multiple contacts.</p>
+    </div>
+  </div>
+  <form method="POST" action="/groups/{{ group.id }}/add-members">
+    <div class="form-group">
+      <label class="form-label" for="contact-add-search">Search contacts</label>
+      <input type="text" class="form-control" id="contact-add-search"
+             placeholder="Filter by name or phone…" autocomplete="off"
+             oninput="filterAddList(this.value)">
+    </div>
+    <div class="form-group">
+      <select class="form-control" name="contact_ids[]" id="add-member-select"
+              multiple size="6" aria-label="Select contacts to add">
+        {% for c in non_members %}
+        <option value="{{ c.id }}"
+                data-search="{{ (c.name ~ ' ' ~ c.phone_number) | lower | e }}">
+          {{ c.name }} ({{ c.phone_number }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
+      <button type="submit" class="btn btn-primary btn-sm">Add selected</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<!-- ─── Current members ───────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Members</p>
+      <h2 class="card__title">Current members</h2>
+    </div>
+    {% if members %}
+    <span class="count-badge">{{ members | length }} member{{ 's' if members | length != 1 }}</span>
+    {% endif %}
+  </div>
+
+  {% if members %}
+  <div class="table-wrapper">
+    <table aria-label="Group members">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Phone</th>
+          <th scope="col">Site</th>
+          <th scope="col">Department</th>
+          <th scope="col" style="text-align:center;width:80px">Remove</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for m in members %}
+        <tr>
+          <td style="font-weight:var(--font-weight-medium)">{{ m.name }}</td>
+          <td><code>{{ m.phone_number }}</code></td>
+          <td style="color:var(--color-text-muted)">{{ m.site or '-' }}</td>
+          <td style="color:var(--color-text-muted)">{{ m.department or '-' }}</td>
+          <td style="text-align:center">
+            <form method="POST" action="/groups/{{ group.id }}/remove-member" style="display:inline"
+                  onsubmit="return confirm('Remove {{ m.name | e }} from this group?')">
+              <input type="hidden" name="contact_id" value="{{ m.id }}">
+              <button type="submit" class="btn btn-outline btn-sm"
+                      aria-label="Remove {{ m.name | e }}">&times;</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No members yet. Add contacts using the form above.</div>
+  {% endif %}
+</div>
+
+<script>
+function filterAddList(q) {
+  q = q.toLowerCase();
+  var select = document.getElementById('add-member-select');
+  if (!select) return;
+  Array.from(select.options).forEach(function(opt) {
+    var s = opt.dataset.search || '';
+    opt.hidden = q ? !s.includes(q) : false;
+  });
+}
+</script>
+
+{% endblock %}

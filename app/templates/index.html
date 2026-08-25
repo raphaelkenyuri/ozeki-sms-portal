@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Contacts — Staff Count{% endblock %}
+{% block title %}Contacts | Staff Count{% endblock %}
 {% block content %}
 
 <div class="page-header">
@@ -18,8 +18,8 @@
       <p class="card__eyebrow">Outbound</p>
       <h2 class="card__title" id="send-heading">Send Message</h2>
       <p class="card__subtitle">
-        Add recipients by typing a number or picking from your contacts. Replies:
-        2&nbsp;=&nbsp;Safe · 3&nbsp;=&nbsp;Unsafe · 4&nbsp;=&nbsp;Out of country.
+        Add recipients by typing a number, picking from contacts, or selecting a whole group.
+        Replies: 2&nbsp;=&nbsp;Safe · 3&nbsp;=&nbsp;Unsafe · 4&nbsp;=&nbsp;Out of country.
       </p>
     </div>
   </div>
@@ -31,37 +31,50 @@
     <div class="form-group">
       <label class="form-label" for="chip-field">Recipients</label>
       <div class="chip-input" id="chip-input" onclick="document.getElementById('chip-field').focus()">
-        <!-- chips injected here by JS -->
         <input type="text" class="chip-input__field" id="chip-field"
                placeholder="Type number, press Enter or comma to add…"
                autocomplete="off" inputmode="tel"
                aria-label="Type a phone number and press Enter or comma to add it">
       </div>
-      <!-- hidden inputs, one per chip, injected by JS -->
       <div id="recipients-container"></div>
       <span class="form-hint">International format e.g. +41791234567. Backspace removes the last chip.</span>
     </div>
 
+    <!-- Group quick-add -->
+    {% if groups %}
+    <div class="form-or" role="separator">or add a whole group</div>
+    <div class="form-group">
+      <label class="form-label" for="group-picker-send">Group</label>
+      <select class="form-control" id="group-picker-send" aria-label="Select a group to add all members">
+        <option value="">Select a group</option>
+        {% for g in groups %}
+        <option value="{{ g.id }}">{{ g.name }} ({{ g.member_count }} member{{ 's' if g.member_count != 1 }})</option>
+        {% endfor %}
+      </select>
+      <span class="form-hint">Selecting a group adds all its members as recipients.</span>
+    </div>
+    {% endif %}
+
     <!-- Contact quick-pick -->
     {% if contacts %}
-    <div class="form-or" role="separator">or pick from contacts</div>
+    <div class="form-or" role="separator">or pick individual contacts</div>
     <div class="form-group">
       <input type="text" class="form-control" id="contact-search"
              placeholder="Search contacts…" autocomplete="off"
              aria-label="Search contacts to add as recipients"
              oninput="filterPicker(this.value)">
       <div class="contact-picker" id="contact-picker" role="listbox"
-           aria-label="Contact list — click to add as recipient">
+           aria-label="Contact list, click to add as recipient">
         {% for c in contacts %}
         <button type="button" class="contact-picker__item"
                 role="option" aria-selected="false"
                 data-phone="{{ c.phone_number | e }}"
                 data-name="{{ c.name | e }}"
-                data-search="{{ (c.name ~ ' ' ~ c.phone_number ~ ' ' ~ (c.group_tag or '')) | lower | e }}">
+                data-search="{{ (c.name ~ ' ' ~ c.phone_number ~ ' ' ~ (c.group_names or '') ~ ' ' ~ (c.site or '') ~ ' ' ~ (c.department or '')) | lower | e }}">
           <span class="contact-picker__name">{{ c.name }}</span>
           <span class="contact-picker__phone">{{ c.phone_number }}</span>
-          {% if c.group_tag %}
-          <span class="contact-picker__group">{{ c.group_tag }}</span>
+          {% if c.group_names %}
+          <span class="contact-picker__group">{{ c.group_names }}</span>
           {% endif %}
         </button>
         {% endfor %}
@@ -109,17 +122,17 @@
       </span>
       {% endif %}
       <button type="button" class="btn btn-outline btn-sm" disabled
-              aria-disabled="true" title="Coming soon — waiting for Excel template">
+              aria-disabled="true" title="Coming soon - waiting for Excel template">
         Import from Excel
         <span class="badge-soon">Soon</span>
       </button>
     </div>
   </div>
 
-  <!-- Add contact -->
+  <!-- Add contact form -->
   <form method="POST" action="/contacts/add" aria-labelledby="contacts-heading"
         style="margin-bottom:var(--sp-6)">
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-3)">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-3);margin-bottom:var(--sp-3)">
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label" for="c_name">Name</label>
         <input type="text" class="form-control" id="c_name" name="name"
@@ -131,23 +144,57 @@
                required placeholder="+41791234567" autocomplete="off">
       </div>
       <div class="form-group" style="margin-bottom:0">
-        <label class="form-label" for="c_group">
-          Group <span class="form-label__opt">(optional)</span>
+        <label class="form-label" for="c_site">
+          Site <span class="form-label__opt">(optional)</span>
         </label>
-        <input type="text" class="form-control" id="c_group" name="group_tag"
-               placeholder="e.g. Field Team North" autocomplete="off">
+        <input type="text" class="form-control" id="c_site" name="site"
+               placeholder="e.g. Nairobi" autocomplete="off">
       </div>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-3);margin-bottom:var(--sp-3)">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_dept">
+          Department <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="c_dept" name="department"
+               placeholder="e.g. Logistics" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_email">
+          Email <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="email" class="form-control" id="c_email" name="email"
+               placeholder="alice@example.org" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_lm">
+          Line manager <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="c_lm" name="line_manager"
+               placeholder="Bob Smith" autocomplete="off">
+      </div>
+    </div>
+    {% if groups %}
+    <div class="form-group" style="margin-bottom:var(--sp-3)">
+      <label class="form-label" for="c_groups">
+        Groups <span class="form-label__opt">(optional, hold Ctrl/Cmd for multiple)</span>
+      </label>
+      <select class="form-control" id="c_groups" name="group_ids[]" multiple size="4">
+        {% for g in groups %}
+        <option value="{{ g.id }}">{{ g.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
       <button type="submit" class="btn btn-primary btn-sm">Add contact</button>
     </div>
   </form>
 
   {% if contacts %}
-  <!-- Table filter -->
   <div class="form-group" style="margin-bottom:var(--sp-4)">
     <input type="text" class="form-control" id="contact-table-search"
-           placeholder="Filter contacts by name, number or group…"
+           placeholder="Filter contacts by name, number, site, department or group…"
            autocomplete="off" aria-label="Filter contact list"
            oninput="filterContactTable(this.value)">
   </div>
@@ -158,7 +205,9 @@
         <tr>
           <th scope="col">Name</th>
           <th scope="col">Phone</th>
-          <th scope="col">Group</th>
+          <th scope="col">Site</th>
+          <th scope="col">Department</th>
+          <th scope="col">Groups</th>
           <th scope="col" style="width:80px;text-align:center">Remove</th>
         </tr>
       </thead>
@@ -166,10 +215,16 @@
       {% for c in contacts %}
         <tr data-name="{{ c.name | lower | e }}"
             data-phone="{{ c.phone_number | e }}"
-            data-group="{{ (c.group_tag or '') | lower | e }}">
-          <td>{{ c.name }}</td>
+            data-group="{{ (c.group_names or '') | lower | e }}"
+            data-site="{{ (c.site or '') | lower | e }}"
+            data-dept="{{ (c.department or '') | lower | e }}">
+          <td title="{{ ('Email: ' ~ c.email ~ ' | Manager: ' ~ c.line_manager) if c.email or c.line_manager else '' }}">
+            {{ c.name }}
+          </td>
           <td><code>{{ c.phone_number }}</code></td>
-          <td style="color:var(--color-text-muted)">{{ c.group_tag or '—' }}</td>
+          <td style="color:var(--color-text-muted)">{{ c.site or '-' }}</td>
+          <td style="color:var(--color-text-muted)">{{ c.department or '-' }}</td>
+          <td style="color:var(--color-text-muted)">{{ c.group_names or '-' }}</td>
           <td style="text-align:center">
             <form method="POST" action="/contacts/delete/{{ c.id }}" style="display:inline"
                   onsubmit="return confirm('Remove {{ c.name | e }}?')">
@@ -183,13 +238,15 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">No contacts yet — add one using the form above.</div>
+  <div class="empty-state">No contacts yet. Add one using the form above.</div>
   {% endif %}
 </div>
 
 <script>
+var GROUP_MEMBERS = {{ group_members_json | safe }};
+
 /* ── State ──────────────────────────────────────────────────────────────── */
-var chips = [];   /* [{phone: string, label: string}] */
+var chips = [];
 
 /* ── Chip management ────────────────────────────────────────────────────── */
 function addChip(phone, label) {
@@ -236,7 +293,6 @@ function renderChips() {
     container.insertBefore(chip, field);
   });
 
-  /* sync hidden inputs */
   var hc = document.getElementById('recipients-container');
   hc.innerHTML = '';
   chips.forEach(function(c) {
@@ -275,6 +331,18 @@ document.getElementById('chip-field').addEventListener('keydown', function(e) {
   }
 });
 
+/* ── Group picker ───────────────────────────────────────────────────────── */
+var groupPicker = document.getElementById('group-picker-send');
+if (groupPicker) {
+  groupPicker.addEventListener('change', function() {
+    var gid = this.value;
+    if (!gid) return;
+    var members = GROUP_MEMBERS[gid] || [];
+    members.forEach(function(m) { addChip(m.phone, m.name); });
+    this.value = '';
+  });
+}
+
 /* ── Contact picker click ────────────────────────────────────────────────── */
 document.querySelectorAll('.contact-picker__item').forEach(function(btn) {
   btn.addEventListener('click', function() {
@@ -301,11 +369,10 @@ function filterPicker(q) {
 function filterContactTable(q) {
   q = q.toLowerCase();
   document.querySelectorAll('#contact-table tbody tr').forEach(function(row) {
-    var name  = row.dataset.name  || '';
-    var phone = row.dataset.phone || '';
-    var group = row.dataset.group || '';
-    row.style.display = (!q || name.includes(q) || phone.includes(q) || group.includes(q))
-      ? '' : 'none';
+    var match = [row.dataset.name, row.dataset.phone, row.dataset.group,
+                 row.dataset.site, row.dataset.dept]
+      .some(function(v) { return (v || '').includes(q); });
+    row.style.display = (!q || match) ? '' : 'none';
   });
 }
 

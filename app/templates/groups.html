@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Groups | Staff Count{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Directory</p>
+  <h1 class="page-header__title">Groups</h1>
+  <p class="page-header__desc">
+    Create groups to send a message to multiple contacts at once.
+    Contacts can belong to more than one group.
+  </p>
+</div>
+
+<!-- ─── Add group ─────────────────────────────────────────────────────────── -->
+<div class="card card--primary">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">New</p>
+      <h2 class="card__title">Create a group</h2>
+    </div>
+  </div>
+  <form method="POST" action="/groups/add">
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:var(--sp-3)">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="g_name">Group name</label>
+        <input type="text" class="form-control" id="g_name" name="name"
+               required placeholder="e.g. Field Team North" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="g_desc">
+          Description <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="g_desc" name="description"
+               placeholder="Brief description of this group" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
+      <button type="submit" class="btn btn-primary btn-sm">Create group</button>
+    </div>
+  </form>
+</div>
+
+<!-- ─── Group list ────────────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">All groups</p>
+      <h2 class="card__title">Group list</h2>
+    </div>
+    {% if groups %}
+    <span class="count-badge">{{ groups | length }} group{{ 's' if groups | length != 1 }}</span>
+    {% endif %}
+  </div>
+
+  {% if groups %}
+  <div class="table-wrapper">
+    <table aria-label="Group list">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Description</th>
+          <th scope="col" style="text-align:right">Members</th>
+          <th scope="col">Created</th>
+          <th scope="col" style="text-align:center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for g in groups %}
+        <tr>
+          <td style="font-weight:var(--font-weight-semibold)">{{ g.name }}</td>
+          <td style="color:var(--color-text-muted)">{{ g.description or '-' }}</td>
+          <td style="text-align:right;font-weight:var(--font-weight-semibold)">{{ g.member_count }}</td>
+          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs)">{{ g.created_at }}</td>
+          <td style="text-align:center">
+            <div style="display:flex;gap:var(--sp-2);justify-content:center">
+              <a href="/groups/{{ g.id }}" class="btn btn-outline btn-sm">Edit</a>
+              <form method="POST" action="/groups/{{ g.id }}/delete" style="display:inline"
+                    onsubmit="return confirm('Delete group {{ g.name | e }}? Members will not be deleted.')">
+                <button type="submit" class="btn btn-outline btn-sm">&times; Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No groups yet. Create one using the form above.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

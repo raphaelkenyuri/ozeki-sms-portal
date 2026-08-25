@@ -19,7 +19,7 @@ def list_addresses():
 
 @bp.post("/addresses/sync")
 def sync_addresses():
-    from_ozeki = ozeki.list_addresses()  # stub — returns []
+    from_ozeki = ozeki.list_addresses()  # stub -  returns []
 
     with get_db() as db:
         with db.cursor() as cur:

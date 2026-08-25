@@ -388,6 +388,16 @@ select.form-control {
   cursor: pointer;
 }
 
+select[multiple].form-control {
+  background-image: none;
+  padding-right: var(--sp-3);
+  height: auto;
+}
+
+select[multiple].form-control option {
+  padding: var(--sp-1) var(--sp-2);
+}
+
 .char-counter {
   text-align: right;
   font-size: var(--font-size-xs);
@@ -529,10 +539,13 @@ tbody tr:hover { background: var(--color-surface-alt); }
   line-height: 1.3;
 }
 
-.tag-safe    { background: var(--color-safe-bg);    color: var(--color-safe-text);    border-color: var(--color-safe-border); }
-.tag-unsafe  { background: var(--color-unsafe-bg);  color: var(--color-unsafe-text);  border-color: var(--color-unsafe-border); }
-.tag-out     { background: var(--color-out-bg);     color: var(--color-out-text);     border-color: var(--color-out-border); }
-.tag-unknown { background: var(--color-unknown-bg); color: var(--color-unknown-text); border-color: var(--color-unknown-border); }
+.tag-safe      { background: var(--color-safe-bg);    color: var(--color-safe-text);    border-color: var(--color-safe-border); }
+.tag-unsafe    { background: var(--color-unsafe-bg);  color: var(--color-unsafe-text);  border-color: var(--color-unsafe-border); }
+.tag-out       { background: var(--color-out-bg);     color: var(--color-out-text);     border-color: var(--color-out-border); }
+.tag-unknown   { background: var(--color-unknown-bg); color: var(--color-unknown-text); border-color: var(--color-unknown-border); }
+.tag-delivered { background: var(--color-safe-bg);    color: var(--color-safe-text);    border-color: var(--color-safe-border); }
+.tag-failed    { background: var(--color-unsafe-bg);  color: var(--color-unsafe-text);  border-color: var(--color-unsafe-border); }
+.tag-sending   { background: var(--color-unknown-bg); color: var(--color-unknown-text); border-color: var(--color-unknown-border); }
 
 /* ── Inline code ────────────────────────────────────────────────────────── */
 code {

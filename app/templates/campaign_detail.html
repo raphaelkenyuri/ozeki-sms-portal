@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Campaign #{{ campaign.id }} | Staff Count{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Campaign #{{ campaign.id }}</p>
+  <h1 class="page-header__title">{{ campaign.body | truncate(80) }}</h1>
+  <p class="page-header__desc">
+    Sent {{ campaign.created_at }} &nbsp;·&nbsp; {{ campaign.recipient_count }} planned recipient{{ 's' if campaign.recipient_count != 1 }}
+  </p>
+  <div style="margin-top:var(--sp-4)">
+    <a href="/campaigns" class="btn btn-outline btn-sm">← Back to campaigns</a>
+  </div>
+</div>
+
+<!-- ─── Stats ─────────────────────────────────────────────────────────────── -->
+<div class="stat-row" aria-label="Campaign summary">
+  <div class="stat-card">
+    <div class="stat-card__label">Sent</div>
+    <div class="stat-card__value">{{ stats.sent_count or 0 }}</div>
+  </div>
+  <div class="stat-card stat-card--safe">
+    <div class="stat-card__label">Delivered</div>
+    <div class="stat-card__value">{{ stats.delivered_count or 0 }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card__label">Responded</div>
+    <div class="stat-card__value">{{ stats.responded_count or 0 }}</div>
+  </div>
+</div>
+
+<!-- ─── Responses (deduplicated) ─────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Inbound</p>
+      <h2 class="card__title">Responses</h2>
+      <p class="card__subtitle">Latest response per sender. Duplicate replies are deduplicated.</p>
+    </div>
+    {% if responses %}
+    <span class="count-badge">{{ responses | length }} sender{{ 's' if responses | length != 1 }}</span>
+    {% endif %}
+  </div>
+
+  {% if responses %}
+  <div class="table-wrapper">
+    <table aria-label="Campaign responses">
+      <thead>
+        <tr>
+          <th scope="col">From</th>
+          <th scope="col">Status</th>
+          <th scope="col">Raw message</th>
+          <th scope="col">Received at</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in responses %}
+        {% set s = r.status | lower %}
+        <tr>
+          <td><code>{{ r.from_number }}</code></td>
+          <td>
+            {% if s == 'safe' %}
+              <span class="tag tag-safe">{{ r.status }}</span>
+            {% elif 'unsafe' in s %}
+              <span class="tag tag-unsafe">{{ r.status }}</span>
+            {% elif 'country' in s %}
+              <span class="tag tag-out">{{ r.status }}</span>
+            {% else %}
+              <span class="tag tag-unknown">{{ r.status }}</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--color-text-muted)">{{ r.raw_message }}</td>
+          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs);white-space:nowrap">
+            {{ r.received_at }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No responses yet for this campaign.</div>
+  {% endif %}
+</div>
+
+<!-- ─── Outbound log ───────────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Outbound log</p>
+      <h2 class="card__title">Recipients</h2>
+      <p class="card__subtitle">All numbers this campaign was sent to, with delivery status.</p>
+    </div>
+  </div>
+
+  {% if outbound %}
+  <div class="table-wrapper">
+    <table aria-label="Campaign outbound">
+      <thead>
+        <tr>
+          <th scope="col">Recipient</th>
+          <th scope="col">OpenVox ID</th>
+          <th scope="col">Delivery</th>
+          <th scope="col">Sent at</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for m in outbound %}
+        {% set ds = (m.delivery_status or '') | upper %}
+        <tr>
+          <td><code>{{ m.address_ref }}</code></td>
+          <td><code>{{ m.ozeki_msg_id or '-' }}</code></td>
+          <td>
+            {% if ds == 'DELIVERED' %}
+              <span class="tag tag-delivered">Delivered</span>
+            {% elif ds in ('FAILED', 'UNDELIVERED') %}
+              <span class="tag tag-failed">{{ m.delivery_status }}</span>
+            {% else %}
+              <span class="tag tag-sending">{{ m.status or 'sending' }}</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--color-text-muted);font-size:var(--font-size-xs);white-space:nowrap">
+            {{ m.sent_at }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No outbound records for this campaign.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

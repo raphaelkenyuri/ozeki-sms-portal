@@ -2,7 +2,7 @@ import logging
 
 from flask import Flask, redirect, url_for
 
-from app.routes import addresses, contacts, messages, webhook, reports
+from app.routes import addresses, contacts, messages, webhook, reports, campaigns, groups
 from app import config
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
@@ -15,6 +15,8 @@ app.register_blueprint(contacts.bp)
 app.register_blueprint(messages.bp)
 app.register_blueprint(webhook.bp)
 app.register_blueprint(reports.bp)
+app.register_blueprint(campaigns.bp)
+app.register_blueprint(groups.bp)
 
 
 @app.get("/")

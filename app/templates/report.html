@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Reports — OpenVox SMS{% endblock %}
+{% block title %}Reports | Staff Count{% endblock %}
 {% block content %}
 
 {% set ns = namespace(total=0, safe=0, unsafe=0, out=0) %}
@@ -26,6 +26,55 @@
       ↓ Export to Excel
     </a>
   </div>
+</div>
+
+<!-- ─── Campaign history ──────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Campaigns</p>
+      <h2 class="card__title">Campaign history</h2>
+      <p class="card__subtitle">Each send creates a campaign. Click Details for a per-recipient breakdown with deduplication.</p>
+    </div>
+    {% if campaigns %}
+    <a href="/campaigns" class="btn btn-outline btn-sm">View all</a>
+    {% endif %}
+  </div>
+
+  {% if campaigns %}
+  <div class="table-wrapper">
+    <table aria-label="Campaign history">
+      <thead>
+        <tr>
+          <th scope="col">Date</th>
+          <th scope="col">Message</th>
+          <th scope="col" style="text-align:right">Sent</th>
+          <th scope="col" style="text-align:right">Delivered</th>
+          <th scope="col" style="text-align:right">Responded</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in campaigns %}
+        <tr>
+          <td style="white-space:nowrap;color:var(--color-text-muted);font-size:var(--font-size-xs)">{{ c.created_at }}</td>
+          <td class="cell-truncate" title="{{ c.body | e }}">{{ c.body }}</td>
+          <td style="text-align:right;font-weight:var(--font-weight-semibold)">{{ c.sent_count or 0 }}</td>
+          <td style="text-align:right">
+            {% if c.delivered_count %}
+            <span class="tag tag-delivered">{{ c.delivered_count }}</span>
+            {% else %}-{% endif %}
+          </td>
+          <td style="text-align:right;font-weight:var(--font-weight-semibold)">{{ c.responded_count or 0 }}</td>
+          <td><a href="/campaigns/{{ c.id }}" class="btn btn-outline btn-sm">Details</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No campaigns yet. Send a message to create one.</div>
+  {% endif %}
 </div>
 
 <!-- ─── Summary stats ─────────────────────────────────────────────────── -->
@@ -171,19 +220,34 @@
           <th scope="col">Recipient</th>
           <th scope="col">Message</th>
           <th scope="col">OpenVox ID</th>
-          <th scope="col">Status</th>
+          <th scope="col">Delivery</th>
           <th scope="col">Sent at</th>
+          <th scope="col">Campaign</th>
         </tr>
       </thead>
       <tbody>
       {% for m in outbound %}
+        {% set ds = (m.delivery_status or '') | upper %}
         <tr>
           <td><code>{{ m.address_ref }}</code></td>
-          <td class="cell-truncate" title="{{ m.body }}">{{ m.body }}</td>
-          <td><code>{{ m.ozeki_msg_id or '—' }}</code></td>
-          <td style="color:var(--color-text-muted)">{{ m.status or '—' }}</td>
+          <td class="cell-truncate" title="{{ m.body | e }}">{{ m.body }}</td>
+          <td><code>{{ m.ozeki_msg_id or '-' }}</code></td>
+          <td>
+            {% if ds == 'DELIVERED' %}
+              <span class="tag tag-delivered">Delivered</span>
+            {% elif ds in ('FAILED', 'UNDELIVERED') %}
+              <span class="tag tag-failed">{{ m.delivery_status }}</span>
+            {% else %}
+              <span class="tag tag-sending">{{ m.status or 'sending' }}</span>
+            {% endif %}
+          </td>
           <td style="color:var(--color-text-muted);font-size:var(--font-size-xs);white-space:nowrap">
             {{ m.sent_at }}
+          </td>
+          <td>
+            {% if m.campaign_id %}
+            <a href="/campaigns/{{ m.campaign_id }}" class="btn btn-outline btn-sm">#{{ m.campaign_id }}</a>
+            {% else %}-{% endif %}
           </td>
         </tr>
       {% endfor %}

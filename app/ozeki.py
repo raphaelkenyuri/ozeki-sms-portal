@@ -12,7 +12,7 @@ Receive (inbound):
   arrives.  Configure on the device at SMS → SMS Settings → HTTP to SMS:
     http://YOUR_HOST:8000/webhook/inbound?phonenumber=${phonenumber}&message=${message}&id=${id}&port=${port}&time=${time}
 
-Address listing: no confirmed REST endpoint — list_addresses() is a stub.
+Address listing: no confirmed REST endpoint -  list_addresses() is a stub.
 """
 
 import logging
@@ -44,8 +44,11 @@ def send_message(recipient: str, messagedata: str, originator: Optional[str] = N
     resp.raise_for_status()
     data = resp.json()
     try:
-        entry = data["report"][0]["1"][0]
-    except (KeyError, IndexError, TypeError):
+        # The key is the GSM port number (e.g. "1", "2", "3", "4") -  not always "1"
+        port_dict = data["report"][0]
+        port_key = next(iter(port_dict))
+        entry = port_dict[port_key][0]
+    except (KeyError, IndexError, TypeError, StopIteration):
         log.error("Unexpected OpenVox response: %s", data)
         return {"result": "error", "messageid": None, "raw": data}
     return {
@@ -92,7 +95,7 @@ def list_addresses() -> list:
     # TODO v2: implement once Ozeki address REST API endpoint is confirmed.
     # No clean API found in the official docs at planning time.
     log.warning(
-        "list_addresses() is a stub — no confirmed Ozeki address API. "
+        "list_addresses() is a stub -  no confirmed Ozeki address API. "
         "Seed addresses manually via the Add form."
     )
     return []

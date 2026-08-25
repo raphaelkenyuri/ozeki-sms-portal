@@ -77,14 +77,18 @@ The typical workflow is:
 
 | Feature | Route |
 |---|---|
-| View cached address list | `GET /addresses` |
-| Manually add an address to cache | `POST /addresses/add` |
-| Attempt address sync from Ozeki | `POST /addresses/sync` |
-| Send a message via Ozeki | `POST /messages/send` |
-| Receive inbound replies (webhook) | `GET /webhook/inbound` |
-| Report: responses by status code | `GET /reports` |
-| Report: responses by sender number | `GET /reports` |
-| Report: recent outbound messages | `GET /reports` |
+| Contact book (name, phone, site, dept, email, line manager) | `GET /contacts` |
+| Add or update a contact | `POST /contacts/add` |
+| Remove a contact | `POST /contacts/delete/<id>` |
+| Group management (create, edit, delete groups) | `GET /groups` |
+| Group detail + member add/remove | `GET /groups/<id>` |
+| Send to individual contacts or a whole group | `POST /messages/send` |
+| Campaign tracking (every send creates a campaign) | auto |
+| Receive inbound replies (OpenVox webhook) | `GET /api` |
+| Delivery status updates from OpenVox | `GET /api` |
+| Campaign detail with deduplicated responses | `GET /campaigns/<id>` |
+| Report: by-status + by-sender + outbound log | `GET /reports` |
+| Excel export (inbound + outbound with delivery status) | `GET /reports/export` |
 | Health check | `GET /health` |
 
 ---
@@ -516,67 +520,71 @@ Replace `192.168.150.246` with your Windows machine's LAN IP. The path `/api` an
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/` | Redirects to `/contacts` |
-| `GET` | `/health` | Returns `{"status": "ok"}` — for monitoring |
-| `GET` | `/contacts` | Contact book + multi-recipient send form |
-| `POST` | `/contacts/add` | Add or update a contact (name, phone, group) |
+| `GET` | `/health` | Returns `{"status": "ok"}` |
+| `GET` | `/contacts` | Contact book + group-aware multi-recipient send form |
+| `POST` | `/contacts/add` | Add or update a contact (6 fields + group membership) |
 | `POST` | `/contacts/delete/<id>` | Remove a contact by ID |
-| `POST` | `/messages/send` | Send to one or more recipients (`recipients[]`); logs each separately |
-| `GET` | `/api` | Primary inbound SMS webhook (OpenVox params: `from`, `text`) |
-| `GET` | `/webhook/inbound` | Alias for `/api` (legacy path) |
-| `GET` | `/reports` | Reporting page: by-code + by-sender breakdowns |
-| `GET` | `/reports/export` | Download Excel export of the report |
+| `GET` | `/groups` | Group list + create-group form |
+| `POST` | `/groups/add` | Create a new group |
+| `GET` | `/groups/<id>` | Group detail: members table + add/remove members |
+| `POST` | `/groups/<id>/add-members` | Add contacts to a group |
+| `POST` | `/groups/<id>/remove-member` | Remove one contact from a group |
+| `POST` | `/groups/<id>/delete` | Delete a group |
+| `POST` | `/messages/send` | Send to recipients (individual or whole group); creates campaign |
+| `GET` | `/api` | OpenVox webhook: inbound SMS replies AND delivery status reports |
+| `GET` | `/webhook/inbound` | Alias for `/api` (legacy) |
+| `GET` | `/campaigns` | Campaign history list |
+| `GET` | `/campaigns/<id>` | Campaign detail with deduplicated responses |
+| `GET` | `/reports` | Reports: campaigns + response breakdown + outbound log |
+| `GET` | `/reports/export` | Excel export (inbound + outbound with delivery status) |
 
 ---
 
 ## Database Schema
 
-The database has two categories of tables: **application data** (contacts — managed in the app, source of truth) and **cache/reporting** (messages and responses derived from gateway activity).
-
-### `contacts` _(added in migration_001)_
-The standalone address book. Managed entirely within the app — not synced from the gateway.
+### `contacts`
+The standalone address book. Managed entirely within the app.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INT PK | |
 | `name` | VARCHAR(255) | Display name (required) |
 | `phone_number` | VARCHAR(30) UNIQUE | International format, e.g. `+41791234567` (required) |
-| `group_tag` | VARCHAR(100) | Optional group label, e.g. `Field Team North` |
+| `site` | VARCHAR(100) | Optional deployment site |
+| `department` | VARCHAR(100) | Optional department |
+| `email` | VARCHAR(255) | Optional email address |
+| `line_manager` | VARCHAR(255) | Optional line manager name |
+| `group_tag` | VARCHAR(100) | Legacy single-group label (superseded by `contact_groups`) |
 | `notes` | VARCHAR(500) | Optional free-text note |
 | `created_at` | DATETIME | Set automatically on insert |
 
----
-
-### `response_codes`
-Lookup table for translating numeric SMS replies to human-readable labels.
-
-| Column | Type | Notes |
-|---|---|---|
-| `code` | INT PK | The digit the user sends (e.g. `2`) |
-| `label` | VARCHAR(50) | Human label (e.g. `Safe`) |
-
-Seeded with: `2 → Safe`, `3 → Unsafe`, `4 → Out of the country`
-
-To add more codes: `INSERT INTO response_codes VALUES (5, 'Your label');`
-
-### `addresses_cache`
-Cache of Ozeki address book entries (recipient groups).
+### `groups`
+Named groups for bulk sending.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INT PK | |
-| `ozeki_ref` | VARCHAR(100) UNIQUE | Address name as Ozeki knows it — used as `recipient` in send API |
-| `name` | VARCHAR(255) | Display name |
-| `last_synced` | DATETIME | When this row was last updated |
+| `name` | VARCHAR(100) UNIQUE | Group name (required) |
+| `description` | VARCHAR(500) | Optional description |
+| `created_at` | DATETIME | |
 
-### `address_members`
-Members (phone numbers) belonging to each address. Populated manually or via a future sync.
+### `contact_groups`
+Many-to-many join between contacts and groups.
+
+| Column | Type | Notes |
+|---|---|---|
+| `contact_id` | INT PK part | FK to `contacts.id` (cascades on delete) |
+| `group_id` | INT PK part | FK to `groups.id` (cascades on delete) |
+
+### `campaigns`
+One row per send operation. Links outbound messages and inbound responses together for per-campaign reporting.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INT PK | |
-| `address_ozeki_ref` | VARCHAR(100) | FK → `addresses_cache.ozeki_ref` |
-| `phone_number` | VARCHAR(30) | |
-| `name` | VARCHAR(255) | |
+| `body` | TEXT | Message body sent |
+| `created_at` | DATETIME | |
+| `recipient_count` | INT | Number of planned recipients |
 
 ### `outbound_messages`
 Record of every message sent through the app.
@@ -584,10 +592,12 @@ Record of every message sent through the app.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INT PK | |
-| `address_ref` | VARCHAR(100) | The phone number or address ref it was sent to |
+| `address_ref` | VARCHAR(100) | Phone number it was sent to |
 | `body` | TEXT | Message content |
-| `ozeki_msg_id` | VARCHAR(16) | Message ID returned by OpenVox (may be `"null"` until device assigns one) |
-| `status` | VARCHAR(50) | OpenVox result string (e.g. `sending`) |
+| `ozeki_msg_id` | VARCHAR(16) | Message ID from OpenVox |
+| `status` | VARCHAR(50) | OpenVox send result (e.g. `sending`) |
+| `delivery_status` | VARCHAR(50) | OpenVox delivery confirmation (`DELIVERED`, `FAILED`, etc.) |
+| `campaign_id` | INT | FK to `campaigns.id` |
 | `sent_at` | DATETIME | |
 
 ### `inbound_responses`
@@ -598,9 +608,22 @@ Every inbound message received via the webhook.
 | `id` | INT PK | |
 | `from_number` | VARCHAR(30) | Sender's phone number |
 | `raw_message` | TEXT | Raw message body as received |
-| `response_code` | INT | Parsed digit (FK → `response_codes.code`); NULL if unparseable |
+| `response_code` | INT | Parsed digit (FK to `response_codes.code`); NULL if unparseable |
 | `translated_status` | VARCHAR(50) | Label from `response_codes`; NULL if code unknown |
+| `campaign_id` | INT | FK to `campaigns.id` (matched by sender phone within 7-day window) |
 | `received_at` | DATETIME | |
+
+### `response_codes`
+Lookup table for translating numeric SMS replies to human-readable labels.
+
+| Column | Type | Notes |
+|---|---|---|
+| `code` | INT PK | The digit the user sends (e.g. `2`) |
+| `label` | VARCHAR(50) | Human label (e.g. `Safe`) |
+
+Seeded with: `2 = Safe`, `3 = Unsafe`, `4 = Out of the country`
+
+To add more codes: `INSERT INTO response_codes VALUES (5, 'Your label');`
 
 ---
 
@@ -680,32 +703,37 @@ If a message contains no digit, `response_code` and `translated_status` are stor
 
 ---
 
-## Contact Book
-
-The app has a built-in address book at `/contacts`. Contacts are managed entirely within the app — they are not synced from the gateway.
+## Contact Book and Groups
 
 ### Add a contact
 
 1. Go to `/contacts`
-2. Fill in **Name** (required), **Phone number** (required, international format e.g. `+41791234567`), and optionally a **Group** label
-3. Click **Add contact** — the contact appears in the list immediately
+2. Fill in all six fields: **Name**, **Phone**, **Site**, **Department**, **Email**, **Line Manager** (only Name and Phone are required)
+3. Optionally select one or more **Groups** (hold Ctrl/Cmd for multiple)
+4. Click **Add contact**
 
-Adding a contact with the same phone number as an existing one updates the name and group (upsert — no duplicate error).
+Adding a contact whose phone number already exists updates the record (upsert, no duplicate error).
+
+### Groups
+
+1. Go to `/groups` to create a group (name + optional description)
+2. Open a group to add or remove members
+3. Contacts can belong to multiple groups
 
 ### Send to multiple recipients
 
-The send form uses a chip-based multi-recipient picker:
+The send form at `/contacts` uses a chip-based multi-recipient picker:
 
-- **Type a number** in the recipients field and press **Enter** or **comma** → it becomes a chip
-- **Click a contact** in the picker list below the search box → it becomes a chip
-- **Remove a chip** by clicking × or pressing Backspace when the field is empty
-- Add as many recipients as needed, then compose your message and click **Send**
+- **Type a number** and press Enter or comma to add a chip
+- **Select a group** from the group dropdown to add all its members at once
+- **Click a contact** in the individual contact picker to add them
+- **Remove a chip** by clicking x or pressing Backspace when the field is empty
 
-Each recipient is sent to independently and logged as a separate row in `outbound_messages`.
+Each send creates a **Campaign**. View per-campaign delivery and response breakdowns at `/campaigns`.
 
-### Import from Excel _(coming soon)_
+### Import from Excel (coming soon)
 
-The "Import from Excel" button is visible but disabled pending an agreed template. Once the template is finalised, a `/contacts/import` route will process the upload and bulk-insert contacts.
+The "Import from Excel" button is visible but disabled pending an agreed template.
 
 ---
 
@@ -864,15 +892,21 @@ ozeki/
 │   ├── ozeki.py         # OpenVox HTTP API client (send_message, list_addresses)
 │   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── addresses.py # /addresses/* (legacy, kept for backward compat)
-│   │   ├── contacts.py  # /contacts, /contacts/add, /contacts/delete/<id>
-│   │   ├── messages.py  # /messages/send (multi-recipient loop)
-│   │   ├── webhook.py   # /api, /webhook/inbound
-│   │   └── reports.py   # /reports, /reports/export
+│   │   ├── addresses.py  # /addresses/* (legacy)
+│   │   ├── contacts.py   # /contacts, /contacts/add, /contacts/delete/<id>
+│   │   ├── messages.py   # /messages/send (campaign creation + group resolution)
+│   │   ├── webhook.py    # /api (inbound SMS + delivery reports)
+│   │   ├── reports.py    # /reports, /reports/export
+│   │   ├── campaigns.py  # /campaigns, /campaigns/<id>
+│   │   └── groups.py     # /groups, /groups/<id>, add/remove members
 │   └── templates/
-│       ├── base.html    # Shared layout, sidebar nav, flash banners
-│       ├── index.html   # Contact book + chip-based send form
-│       └── report.html  # Response breakdown tables + Excel export
+│       ├── base.html           # Shared layout, sidebar nav, flash banners
+│       ├── index.html          # Contact book + group-aware send form
+│       ├── report.html         # Response breakdown + campaign summary
+│       ├── campaigns.html      # Campaign history list
+│       ├── campaign_detail.html # Per-campaign breakdown (deduplicated)
+│       ├── groups.html         # Group management
+│       └── group_detail.html   # Group members + add/remove
 ├── Dockerfile               # Container image (python:3.11-slim + pip install)
 ├── docker-compose.yml       # App + MariaDB 11 services
 ├── requirements-docker.txt  # Pinned pip deps for Docker image
