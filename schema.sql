@@ -75,6 +75,9 @@ ALTER TABLE outbound_messages
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
 
 ALTER TABLE inbound_responses
+    ADD COLUMN IF NOT EXISTS campaign_id INT DEFAULT NULL;
+
+ALTER TABLE inbound_responses
     ADD CONSTRAINT fk_inbound_campaign
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
 
