@@ -71,11 +71,11 @@ ALTER TABLE outbound_messages
     ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(50) DEFAULT NULL;
 
 ALTER TABLE outbound_messages
-    ADD CONSTRAINT IF NOT EXISTS fk_outbound_campaign
+    ADD CONSTRAINT fk_outbound_campaign
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
 
 ALTER TABLE inbound_responses
-    ADD CONSTRAINT IF NOT EXISTS fk_inbound_campaign
+    ADD CONSTRAINT fk_inbound_campaign
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
 
 -- ── Contacts — extended fields ───────────────────────────────────────────────
