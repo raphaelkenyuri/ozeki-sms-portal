@@ -115,8 +115,9 @@ CREATE INDEX IF NOT EXISTS idx_outbound_campaign ON outbound_messages  (campaign
 -- ── Campaign extended fields ──────────────────────────────────────────────────
 
 ALTER TABLE campaigns
-    ADD COLUMN IF NOT EXISTS name                 VARCHAR(255) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS response_window_days INT NOT NULL DEFAULT 30;
+    ADD COLUMN IF NOT EXISTS name                  VARCHAR(255) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS response_window_days  INT NOT NULL DEFAULT 30,
+    ADD COLUMN IF NOT EXISTS response_window_unit  VARCHAR(10) NOT NULL DEFAULT 'days';
 
 -- ── Keyword response mapping ──────────────────────────────────────────────────
 -- Inbound SMS text is normalized (lowercase, punctuation stripped) and matched

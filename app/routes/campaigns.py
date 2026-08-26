@@ -1,10 +1,13 @@
 import json
+import logging
 from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from app import ozeki
 from app.database import get_db
+
+log = logging.getLogger(__name__)
 
 bp = Blueprint("campaigns", __name__)
 
@@ -40,10 +43,12 @@ def create_campaign():
     name = request.form.get("name", "").strip() or None
     body = request.form.get("body", "").strip()
     try:
-        window = int(request.form.get("response_window_days", 30))
-        window = max(1, min(365, window))
+        window = max(1, int(request.form.get("response_window_days", 30)))
     except (ValueError, TypeError):
         window = 30
+    unit = request.form.get("response_window_unit", "days").strip()
+    if unit not in ("minutes", "hours", "days"):
+        unit = "days"
 
     if not body:
         flash("Message body is required.", "error")
@@ -53,9 +58,9 @@ def create_campaign():
     with get_db() as db:
         with db.cursor() as cur:
             cur.execute(
-                "INSERT INTO campaigns (name, body, recipient_count, created_at, response_window_days) "
-                "VALUES (%s, %s, 0, %s, %s)",
-                (name, body, now, window),
+                "INSERT INTO campaigns (name, body, recipient_count, created_at, response_window_days, response_window_unit) "
+                "VALUES (%s, %s, 0, %s, %s, %s)",
+                (name, body, now, window, unit),
             )
             campaign_id = cur.lastrowid
 
@@ -67,7 +72,8 @@ def campaign_detail(campaign_id):
     with get_db() as db:
         with db.cursor() as cur:
             cur.execute(
-                "SELECT id, name, body, created_at, recipient_count, response_window_days "
+                "SELECT id, name, body, created_at, recipient_count, "
+                "response_window_days, response_window_unit "
                 "FROM campaigns WHERE id = %s",
                 (campaign_id,),
             )
@@ -201,8 +207,8 @@ def send_campaign(campaign_id):
                     )
                     for row in cur.fetchall():
                         raw.append(row["phone_number"])
-        except Exception:
-            pass
+        except Exception as exc:
+            log.error("Failed to fetch group members for group_id=%s: %s", group_id, exc)
 
     seen = set()
     recipients = []
@@ -224,7 +230,8 @@ def send_campaign(campaign_id):
     for recipient in recipients:
         try:
             result = ozeki.send_message(recipient=recipient, messagedata=body)
-        except Exception:
+        except Exception as exc:
+            log.error("Send failed for recipient=%s: %s", recipient, exc)
             result = {"result": "error", "messageid": None}
 
         msg_id_raw = result.get("messageid")
@@ -270,10 +277,12 @@ def send_campaign(campaign_id):
 def edit_campaign(campaign_id):
     name = request.form.get("name", "").strip() or None
     try:
-        window = int(request.form.get("response_window_days", 30))
-        window = max(1, min(365, window))
+        window = max(1, int(request.form.get("response_window_days", 30)))
     except (ValueError, TypeError):
         window = 30
+    unit = request.form.get("response_window_unit", "days").strip()
+    if unit not in ("minutes", "hours", "days"):
+        unit = "days"
 
     with get_db() as db:
         with db.cursor() as cur:
@@ -285,8 +294,8 @@ def edit_campaign(campaign_id):
 
             if has_sent:
                 cur.execute(
-                    "UPDATE campaigns SET name=%s, response_window_days=%s WHERE id=%s",
-                    (name, window, campaign_id),
+                    "UPDATE campaigns SET name=%s, response_window_days=%s, response_window_unit=%s WHERE id=%s",
+                    (name, window, unit, campaign_id),
                 )
             else:
                 body = request.form.get("body", "").strip()
@@ -294,8 +303,8 @@ def edit_campaign(campaign_id):
                     flash("Message body is required.", "error")
                     return redirect(url_for("campaigns.campaign_detail", campaign_id=campaign_id))
                 cur.execute(
-                    "UPDATE campaigns SET name=%s, body=%s, response_window_days=%s WHERE id=%s",
-                    (name, body, window, campaign_id),
+                    "UPDATE campaigns SET name=%s, body=%s, response_window_days=%s, response_window_unit=%s WHERE id=%s",
+                    (name, body, window, unit, campaign_id),
                 )
 
     flash("Campaign updated.", "success")

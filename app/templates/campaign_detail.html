@@ -8,7 +8,7 @@
   <p class="page-header__desc">
     Created {{ campaign.created_at }} &nbsp;·&nbsp;
     {{ campaign.recipient_count }} recipient{{ 's' if campaign.recipient_count != 1 }} &nbsp;·&nbsp;
-    Response window: {{ campaign.response_window_days }} day{{ 's' if campaign.response_window_days != 1 }}
+    Response window: {{ campaign.response_window_days }} {{ campaign.response_window_unit }}
   </p>
   <div style="margin-top:var(--sp-4);display:flex;gap:var(--sp-2);flex-wrap:wrap">
     <a href="/campaigns" class="btn btn-outline btn-sm">← Back to campaigns</a>
@@ -35,9 +35,16 @@
                  value="{{ campaign.name or '' }}" autocomplete="off">
         </div>
         <div class="form-group" style="margin-bottom:0">
-          <label class="form-label" for="e_window">Response window (days)</label>
-          <input type="number" class="form-control" id="e_window" name="response_window_days"
-                 value="{{ campaign.response_window_days }}" min="1" max="365">
+          <label class="form-label" for="e_window">Response window</label>
+          <div style="display:flex;gap:var(--sp-2);align-items:center">
+            <input type="number" class="form-control" id="e_window" name="response_window_days"
+                   value="{{ campaign.response_window_days }}" min="1" style="flex:1">
+            <select class="form-control" name="response_window_unit" style="flex:0 0 110px">
+              <option value="minutes" {% if campaign.response_window_unit == 'minutes' %}selected{% endif %}>Minutes</option>
+              <option value="hours"   {% if campaign.response_window_unit == 'hours'   %}selected{% endif %}>Hours</option>
+              <option value="days"    {% if campaign.response_window_unit == 'days' or not campaign.response_window_unit %}selected{% endif %}>Days</option>
+            </select>
+          </div>
         </div>
       </div>
       {% if not has_sent %}
@@ -134,6 +141,7 @@
           {% endif %}
         </button>
         {% endfor %}
+        <div class="contact-picker__empty" id="picker-empty" style="display:none">No contacts match your search.</div>
       </div>
     </div>
     {% endif %}
@@ -371,9 +379,14 @@ document.querySelectorAll('.contact-picker__item').forEach(function(btn) {
 
 function filterPicker(q) {
   q = q.toLowerCase();
+  var visible = 0;
   document.querySelectorAll('.contact-picker__item').forEach(function(el) {
-    el.style.display = (!q || (el.dataset.search || '').includes(q)) ? '' : 'none';
+    var show = !q || (el.dataset.search || '').includes(q);
+    el.style.display = show ? '' : 'none';
+    if (show) visible++;
   });
+  var empty = document.getElementById('picker-empty');
+  if (empty) empty.style.display = (q && visible === 0) ? '' : 'none';
 }
 
 function prepareSubmit() {
@@ -381,6 +394,9 @@ function prepareSubmit() {
     alert('Add at least one recipient before sending.');
     return false;
   }
+  var btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
   return true;
 }
 

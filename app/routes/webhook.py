@@ -119,7 +119,11 @@ def _handle_inbound_sms():
                     JOIN campaigns c ON c.id = o.campaign_id
                     WHERE o.address_ref = %s
                       AND o.campaign_id IS NOT NULL
-                      AND o.sent_at >= DATE_SUB(NOW(), INTERVAL c.response_window_days DAY)
+                      AND o.sent_at >= CASE c.response_window_unit
+                          WHEN 'minutes' THEN DATE_SUB(NOW(), INTERVAL c.response_window_days MINUTE)
+                          WHEN 'hours'   THEN DATE_SUB(NOW(), INTERVAL c.response_window_days HOUR)
+                          ELSE                DATE_SUB(NOW(), INTERVAL c.response_window_days DAY)
+                      END
                     ORDER BY o.sent_at DESC
                     LIMIT 1
                     """,

@@ -45,12 +45,19 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label" for="c_window">Response window (days)</label>
-      <input type="number" class="form-control" id="c_window" name="response_window_days"
-             value="30" min="1" max="365" style="max-width:140px">
+      <label class="form-label" for="c_window">Response window</label>
+      <div style="display:flex;gap:var(--sp-2);align-items:center;max-width:280px">
+        <input type="number" class="form-control" id="c_window" name="response_window_days"
+               value="30" min="1" style="flex:1">
+        <select class="form-control" name="response_window_unit" style="flex:0 0 110px">
+          <option value="minutes">Minutes</option>
+          <option value="hours">Hours</option>
+          <option value="days" selected>Days</option>
+        </select>
+      </div>
       <span class="form-hint">
-        Replies received within this many days of sending are attributed to this campaign.
-        Increase for welfare checks where staff may respond weeks later.
+        Replies received within this window are attributed to this campaign.
+        Use minutes/hours for time-sensitive checks, days for welfare rounds.
       </span>
     </div>
 
