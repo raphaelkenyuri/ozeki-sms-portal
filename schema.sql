@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS inbound_responses (
     response_code     INT,
     translated_status VARCHAR(50),
     received_at       DATETIME     NOT NULL,
-    campaign_id       INT          DEFAULT NULL,
     FOREIGN KEY (response_code) REFERENCES response_codes(code)
 );
 
@@ -70,6 +69,7 @@ ALTER TABLE outbound_messages
     ADD COLUMN IF NOT EXISTS campaign_id     INT DEFAULT NULL,
     ADD COLUMN IF NOT EXISTS delivery_status VARCHAR(50) DEFAULT NULL;
 
+ALTER TABLE outbound_messages DROP FOREIGN KEY IF EXISTS fk_outbound_campaign;
 ALTER TABLE outbound_messages
     ADD CONSTRAINT fk_outbound_campaign
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
@@ -77,6 +77,7 @@ ALTER TABLE outbound_messages
 ALTER TABLE inbound_responses
     ADD COLUMN IF NOT EXISTS campaign_id INT DEFAULT NULL;
 
+ALTER TABLE inbound_responses DROP FOREIGN KEY IF EXISTS fk_inbound_campaign;
 ALTER TABLE inbound_responses
     ADD CONSTRAINT fk_inbound_campaign
         FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE SET NULL;
