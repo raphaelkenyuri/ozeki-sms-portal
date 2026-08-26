@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Contacts | Staff Count{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Directory</p>
+  <h1 class="page-header__title">Contacts</h1>
+  <p class="page-header__desc">
+    Manage your contact book. New contacts are automatically added to the <strong>All staff</strong> group.
+    To send a message, <a href="/campaigns" style="color:var(--color-brand-primary)">open or create a campaign</a>.
+  </p>
+</div>
+
+<!-- ─── Add contact ───────────────────────────────────────────────────────── -->
+<div class="card card--primary" id="contacts-section">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">New</p>
+      <h2 class="card__title" id="contacts-heading">Add Contact</h2>
+    </div>
+    <div style="display:flex;gap:var(--sp-2);align-items:center;flex-shrink:0">
+      {% if contacts %}
+      <span class="count-badge" aria-label="{{ contacts | length }} contacts">
+        {{ contacts | length }} contact{{ 's' if contacts | length != 1 }}
+      </span>
+      {% endif %}
+      <button type="button" class="btn btn-outline btn-sm" disabled
+              aria-disabled="true" title="Coming soon">
+        Import from Excel
+        <span class="badge-soon">Soon</span>
+      </button>
+    </div>
+  </div>
+
+  <form method="POST" action="/contacts/add" aria-labelledby="contacts-heading"
+        style="margin-bottom:var(--sp-2)">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-3);margin-bottom:var(--sp-3)">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_name">Name</label>
+        <input type="text" class="form-control" id="c_name" name="name"
+               required placeholder="Alice Smith" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_phone">Phone number</label>
+        <input type="tel" class="form-control" id="c_phone" name="phone_number"
+               required placeholder="+41791234567" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_site">
+          Site <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="c_site" name="site"
+               placeholder="e.g. Nairobi" autocomplete="off">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-3);margin-bottom:var(--sp-3)">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_dept">
+          Department <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="c_dept" name="department"
+               placeholder="e.g. Logistics" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_email">
+          Email <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="email" class="form-control" id="c_email" name="email"
+               placeholder="alice@example.org" autocomplete="off">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label" for="c_lm">
+          Line manager <span class="form-label__opt">(optional)</span>
+        </label>
+        <input type="text" class="form-control" id="c_lm" name="line_manager"
+               placeholder="Bob Smith" autocomplete="off">
+      </div>
+    </div>
+    {% if groups %}
+    <div class="form-group" style="margin-bottom:var(--sp-3)">
+      <label class="form-label" for="c_groups">
+        Additional groups <span class="form-label__opt">(optional — hold Ctrl/Cmd for multiple)</span>
+      </label>
+      <select class="form-control" id="c_groups" name="group_ids[]" multiple size="4">
+        {% for g in groups %}
+        <option value="{{ g.id }}">{{ g.name }}</option>
+        {% endfor %}
+      </select>
+      <span class="form-hint">All contacts are automatically added to <strong>All staff</strong>.</span>
+    </div>
+    {% endif %}
+    <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
+      <button type="submit" class="btn btn-primary btn-sm">Add contact</button>
+    </div>
+  </form>
+</div>
+
+<!-- ─── Contact list ──────────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Directory</p>
+      <h2 class="card__title">All contacts</h2>
+    </div>
+  </div>
+
+  {% if contacts %}
+  <div class="form-group" style="margin-bottom:var(--sp-4)">
+    <input type="text" class="form-control" id="contact-table-search"
+           placeholder="Filter by name, number, site, department or group…"
+           autocomplete="off" aria-label="Filter contact list"
+           oninput="filterContactTable(this.value)">
+  </div>
+
+  <div class="table-wrapper">
+    <table aria-label="Contact list" id="contact-table">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Phone</th>
+          <th scope="col">Site</th>
+          <th scope="col">Department</th>
+          <th scope="col">Groups</th>
+          <th scope="col" style="width:120px;text-align:center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in contacts %}
+        <tr data-name="{{ c.name | lower | e }}"
+            data-phone="{{ c.phone_number | e }}"
+            data-group="{{ (c.group_names or '') | lower | e }}"
+            data-site="{{ (c.site or '') | lower | e }}"
+            data-dept="{{ (c.department or '') | lower | e }}">
+          <td title="{{ ('Email: ' ~ c.email ~ ' | Manager: ' ~ c.line_manager) if c.email or c.line_manager else '' }}">
+            {{ c.name }}
+          </td>
+          <td><code>{{ c.phone_number }}</code></td>
+          <td style="color:var(--color-text-muted)">{{ c.site or '-' }}</td>
+          <td style="color:var(--color-text-muted)">{{ c.department or '-' }}</td>
+          <td style="color:var(--color-text-muted)">{{ c.group_names or '-' }}</td>
+          <td style="text-align:center">
+            <div style="display:flex;gap:var(--sp-1);justify-content:center">
+              <a href="/contacts/{{ c.id }}/edit" class="btn btn-outline btn-sm"
+                 aria-label="Edit {{ c.name | e }}">Edit</a>
+              <form method="POST" action="/contacts/delete/{{ c.id }}" style="display:inline"
+                    onsubmit="return confirm('Remove {{ c.name | e }}?')">
+                <button type="submit" class="btn btn-outline btn-sm"
+                        aria-label="Remove {{ c.name | e }}">&times;</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No contacts yet. Add one using the form above.</div>
+  {% endif %}
+</div>
+
+<script>
+function filterContactTable(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#contact-table tbody tr').forEach(function(row) {
+    var match = [row.dataset.name, row.dataset.phone, row.dataset.group,
+                 row.dataset.site, row.dataset.dept]
+      .some(function(v) { return (v || '').includes(q); });
+    row.style.display = (!q || match) ? '' : 'none';
+  });
+}
+</script>
+
+{% endblock %}

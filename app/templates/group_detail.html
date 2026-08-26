@@ -13,6 +13,34 @@
   </div>
 </div>
 
+<!-- ─── Edit group ─────────────────────────────────────────────────────────── -->
+<details class="card" style="margin-bottom:var(--sp-6)">
+  <summary style="cursor:pointer;padding:var(--sp-4) var(--sp-5);font-weight:var(--font-weight-semibold);list-style:none;display:flex;align-items:center;gap:var(--sp-2)">
+    <span>✎ Edit group</span>
+  </summary>
+  <div style="padding:0 var(--sp-5) var(--sp-5)">
+    <form method="POST" action="/groups/{{ group.id }}/edit">
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:var(--sp-4);margin-bottom:var(--sp-4)">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="eg_name">Group name</label>
+          <input type="text" class="form-control" id="eg_name" name="name"
+                 required value="{{ group.name | e }}" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="eg_desc">
+            Description <span class="form-label__opt">(optional)</span>
+          </label>
+          <input type="text" class="form-control" id="eg_desc" name="description"
+                 value="{{ group.description or '' | e }}" autocomplete="off">
+        </div>
+      </div>
+      <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
+        <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
+      </div>
+    </form>
+  </div>
+</details>
+
 <!-- ─── Add members ───────────────────────────────────────────────────────── -->
 {% if non_members %}
 <div class="card card--primary">

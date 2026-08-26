@@ -163,6 +163,37 @@ body {
   outline-offset: 2px;
 }
 
+/* Sub-nav item (e.g. Groups nested under Contacts) */
+.sidebar-sublink {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) calc(var(--sp-3) + var(--sp-7));
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: rgba(255,255,255,.5);
+  text-decoration: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  margin-top: calc(var(--sp-1) * -1);
+}
+
+.sidebar-sublink::before {
+  content: "↳";
+  flex-shrink: 0;
+  opacity: .6;
+}
+
+.sidebar-sublink:hover {
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.85);
+}
+
+.sidebar-sublink--active {
+  color: var(--color-text-inverse);
+  font-weight: var(--font-weight-semibold);
+}
+
 /* ── Main content ───────────────────────────────────────────────────────── */
 .app-main {
   flex: 1;

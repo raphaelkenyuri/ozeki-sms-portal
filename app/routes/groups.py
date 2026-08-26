@@ -90,6 +90,29 @@ def group_detail(group_id):
     )
 
 
+@bp.post("/groups/<int:group_id>/edit")
+def edit_group(group_id):
+    name        = request.form.get("name", "").strip()
+    description = request.form.get("description", "").strip() or None
+
+    if not name:
+        flash("Group name is required.", "error")
+        return redirect(url_for("groups.group_detail", group_id=group_id))
+
+    try:
+        with get_db() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    "UPDATE `groups` SET name=%s, description=%s WHERE id=%s",
+                    (name, description, group_id),
+                )
+        flash("Group updated.", "success")
+    except Exception:
+        flash("A group with that name already exists.", "error")
+
+    return redirect(url_for("groups.group_detail", group_id=group_id))
+
+
 @bp.post("/groups/<int:group_id>/add-members")
 def add_members(group_id):
     contact_ids = request.form.getlist("contact_ids[]")

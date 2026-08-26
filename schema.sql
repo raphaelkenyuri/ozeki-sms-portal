@@ -111,3 +111,34 @@ CREATE TABLE IF NOT EXISTS contact_groups (
 
 CREATE INDEX IF NOT EXISTS idx_inbound_campaign  ON inbound_responses (campaign_id, from_number, received_at);
 CREATE INDEX IF NOT EXISTS idx_outbound_campaign ON outbound_messages  (campaign_id);
+
+-- ── Campaign extended fields ──────────────────────────────────────────────────
+
+ALTER TABLE campaigns
+    ADD COLUMN IF NOT EXISTS name                 VARCHAR(255) DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS response_window_days INT NOT NULL DEFAULT 30;
+
+-- ── Keyword response mapping ──────────────────────────────────────────────────
+-- Inbound SMS text is normalized (lowercase, punctuation stripped) and matched
+-- against this table. Add rows here to support new keywords without code changes.
+
+CREATE TABLE IF NOT EXISTS response_keywords (
+    keyword VARCHAR(50) PRIMARY KEY,
+    code    INT NOT NULL,
+    FOREIGN KEY (code) REFERENCES response_codes(code) ON DELETE CASCADE
+);
+
+INSERT IGNORE INTO response_keywords (keyword, code) VALUES
+    ('2', 2), ('two', 2), ('safe', 2),
+    ('3', 3), ('three', 3), ('unsafe', 3),
+    ('4', 4), ('four', 4), ('ooc', 4), ('out', 4), ('out of country', 4);
+
+-- ── All staff default group ───────────────────────────────────────────────────
+-- Every new contact is auto-enrolled in this group. Run the back-fill INSERT
+-- once after this migration to enroll contacts that existed before this change.
+
+INSERT IGNORE INTO `groups` (name, description, created_at)
+VALUES ('All staff', 'Default group — every contact is enrolled automatically.', NOW());
+
+INSERT IGNORE INTO contact_groups (contact_id, group_id)
+SELECT c.id, g.id FROM contacts c JOIN `groups` g ON g.name = 'All staff';

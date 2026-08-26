@@ -21,7 +21,7 @@ app.register_blueprint(groups.bp)
 
 @app.get("/")
 def root():
-    return redirect(url_for("contacts.list_contacts"))
+    return redirect(url_for("campaigns.list_campaigns"))
 
 
 @app.get("/health")

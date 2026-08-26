@@ -1,5 +1,5 @@
 """
-Inbound webhook -  OpenVox pushes a GET request here when an SMS arrives or
+Inbound webhook — OpenVox pushes a GET request here when an SMS arrives or
 when a delivery report is ready.
 
 OpenVox SMS-to-HTTP config (SMS → SMS Settings → SMS to HTTP):
@@ -13,6 +13,10 @@ endpoint with different parameters: id=<msg_id>&status=<DELIVERED|FAILED>
 and no `from` or `text` fields.
 
 Must return HTTP 2xx; OpenVox retries on non-2xx.
+
+Response keyword matching: full message text (normalized) is looked up in the
+response_keywords table. Falls back to the first word if the full message
+doesn't match. Examples: "safe", "two", "unsafe", "ooc", "out of country".
 """
 
 import logging
@@ -26,18 +30,41 @@ from app.database import get_db
 log = logging.getLogger(__name__)
 bp = Blueprint("webhook", __name__)
 
-CAMPAIGN_MATCH_WINDOW_DAYS = 7
 
+def _lookup_response_code(text: str):
+    """Return (code, label) by matching normalized text against response_keywords."""
+    if not text:
+        return None, None
+    normalized = re.sub(r"[^a-z0-9 ]", "", text.strip().lower())
+    normalized = re.sub(r" +", " ", normalized).strip()
+    if not normalized:
+        return None, None
 
-def _extract_code(text: str):
-    m = re.search(r"\d", text or "")
-    return int(m.group()) if m else None
+    candidates = [normalized]
+    parts = normalized.split()
+    if len(parts) > 1:
+        candidates.append(parts[0])
+
+    with get_db() as db:
+        with db.cursor() as cur:
+            for candidate in candidates:
+                cur.execute(
+                    "SELECT rk.code, rc.label "
+                    "FROM response_keywords rk "
+                    "JOIN response_codes rc ON rc.code = rk.code "
+                    "WHERE rk.keyword = %s",
+                    (candidate,),
+                )
+                row = cur.fetchone()
+                if row:
+                    return row["code"], row["label"]
+    return None, None
 
 
 def _handle_delivery_report(msg_id: str, status: str):
     """Update outbound_messages.delivery_status when OpenVox confirms delivery."""
     if not msg_id:
-        log.warning("Delivery report missing message id -  ignored")
+        log.warning("Delivery report missing message id — ignored")
         return ("OK", 200)
 
     log.info("Delivery report: id=%s status=%s", msg_id, status)
@@ -50,7 +77,7 @@ def _handle_delivery_report(msg_id: str, status: str):
                     (status, msg_id),
                 )
                 if cur.rowcount == 0:
-                    log.warning("Delivery report for unknown ozeki_msg_id=%s -  no row matched", msg_id)
+                    log.warning("Delivery report for unknown ozeki_msg_id=%s — no row matched", msg_id)
     except Exception as exc:
         log.error("Error saving delivery report: %s", exc)
 
@@ -66,72 +93,56 @@ def _handle_inbound_sms():
 
     log.info("Inbound SMS: from=%s port=%s channel=%s msg=%r", from_number, port, channel, msg)
 
-    code = _extract_code(msg)
-    translated = None
-
-    if code is not None:
-        with get_db() as db:
-            with db.cursor() as cur:
-                cur.execute("SELECT label FROM response_codes WHERE code = %s", (code,))
-                row = cur.fetchone()
-                translated = row["label"] if row else None
-
+    code, translated = _lookup_response_code(msg)
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-    inbound_id = None
-    with get_db() as db:
-        with db.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO inbound_responses
-                    (from_number, raw_message, response_code, translated_status, received_at)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (
-                    from_number,
-                    msg,
-                    code if translated else None,
-                    translated,
-                    now,
-                ),
-            )
-            inbound_id = cur.lastrowid
+    try:
+        with get_db() as db:
+            with db.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO inbound_responses
+                        (from_number, raw_message, response_code, translated_status, received_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (from_number, msg, code, translated, now),
+                )
+                inbound_id = cur.lastrowid
 
-    # Link to the most recent campaign that sent to this number (within window)
-    if inbound_id:
-        try:
-            with get_db() as db:
-                with db.cursor() as cur:
+            # Link to the most recent campaign that sent to this number,
+            # respecting each campaign's own response_window_days.
+            with db.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT o.campaign_id
+                    FROM outbound_messages o
+                    JOIN campaigns c ON c.id = o.campaign_id
+                    WHERE o.address_ref = %s
+                      AND o.campaign_id IS NOT NULL
+                      AND o.sent_at >= DATE_SUB(NOW(), INTERVAL c.response_window_days DAY)
+                    ORDER BY o.sent_at DESC
+                    LIMIT 1
+                    """,
+                    (from_number,),
+                )
+                row = cur.fetchone()
+                if row:
                     cur.execute(
-                        """
-                        SELECT campaign_id FROM outbound_messages
-                        WHERE address_ref = %s
-                          AND campaign_id IS NOT NULL
-                          AND sent_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
-                        ORDER BY sent_at DESC
-                        LIMIT 1
-                        """,
-                        (from_number, CAMPAIGN_MATCH_WINDOW_DAYS),
+                        "UPDATE inbound_responses SET campaign_id = %s WHERE id = %s",
+                        (row["campaign_id"], inbound_id),
                     )
-                    row = cur.fetchone()
-                    if row:
-                        cur.execute(
-                            "UPDATE inbound_responses SET campaign_id = %s WHERE id = %s",
-                            (row["campaign_id"], inbound_id),
-                        )
-        except Exception as exc:
-            log.warning("Campaign linking failed: %s", exc)
+    except Exception as exc:
+        log.error("Error saving inbound SMS: %s", exc)
 
     return ("OK", 200)
 
 
 def _handle_inbound():
-    text     = request.args.get("text", "").strip()
-    msg_id   = request.args.get("id",   "").strip()
+    text       = request.args.get("text", "").strip()
+    msg_id     = request.args.get("id",   "").strip()
     raw_status = request.args.get("status", "").strip()
-    from_num = request.args.get("from", "").strip()
+    from_num   = request.args.get("from", "").strip()
 
-    # Delivery report: has a message id, no text body, no real sender
     is_delivery_report = bool(msg_id and not text and not from_num)
 
     if is_delivery_report:
@@ -141,7 +152,7 @@ def _handle_inbound():
 
 @bp.get("/api")
 def openvox_inbound():
-    """Primary endpoint -  matches the /api path OpenVox uses by default."""
+    """Primary endpoint — matches the /api path OpenVox uses by default."""
     return _handle_inbound()
 
 

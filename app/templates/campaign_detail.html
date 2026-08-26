@@ -1,17 +1,152 @@
 {% extends "base.html" %}
-{% block title %}Campaign #{{ campaign.id }} | Staff Count{% endblock %}
+{% block title %}{{ campaign.name or ('Campaign #' ~ campaign.id) }} | Staff Count{% endblock %}
 {% block content %}
 
 <div class="page-header">
   <p class="page-header__eyebrow">Campaign #{{ campaign.id }}</p>
-  <h1 class="page-header__title">{{ campaign.body | truncate(80) }}</h1>
+  <h1 class="page-header__title">{{ campaign.name or (campaign.body | truncate(60)) }}</h1>
   <p class="page-header__desc">
-    Sent {{ campaign.created_at }} &nbsp;·&nbsp; {{ campaign.recipient_count }} planned recipient{{ 's' if campaign.recipient_count != 1 }}
+    Created {{ campaign.created_at }} &nbsp;·&nbsp;
+    {{ campaign.recipient_count }} recipient{{ 's' if campaign.recipient_count != 1 }} &nbsp;·&nbsp;
+    Response window: {{ campaign.response_window_days }} day{{ 's' if campaign.response_window_days != 1 }}
   </p>
-  <div style="margin-top:var(--sp-4)">
+  <div style="margin-top:var(--sp-4);display:flex;gap:var(--sp-2);flex-wrap:wrap">
     <a href="/campaigns" class="btn btn-outline btn-sm">← Back to campaigns</a>
+    <form method="POST" action="/campaigns/{{ campaign.id }}/delete" style="display:inline"
+          onsubmit="return confirm('Delete this campaign? Sent messages and responses will be kept but unlinked.')">
+      <button type="submit" class="btn btn-outline btn-sm">Delete campaign</button>
+    </form>
   </div>
 </div>
+
+<!-- ─── Edit campaign ──────────────────────────────────────────────────────── -->
+<details class="card" style="margin-bottom:var(--sp-6)">
+  <summary style="cursor:pointer;padding:var(--sp-4) var(--sp-5);font-weight:var(--font-weight-semibold);list-style:none;display:flex;align-items:center;gap:var(--sp-2)">
+    <span>✎ Edit campaign</span>
+  </summary>
+  <div style="padding:0 var(--sp-5) var(--sp-5)">
+    <form method="POST" action="/campaigns/{{ campaign.id }}/edit">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:var(--sp-4);margin-bottom:var(--sp-4)">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="e_name">
+            Name <span class="form-label__opt">(optional)</span>
+          </label>
+          <input type="text" class="form-control" id="e_name" name="name"
+                 value="{{ campaign.name or '' }}" autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="e_window">Response window (days)</label>
+          <input type="number" class="form-control" id="e_window" name="response_window_days"
+                 value="{{ campaign.response_window_days }}" min="1" max="365">
+        </div>
+      </div>
+      {% if not has_sent %}
+      <div class="form-group">
+        <label class="form-label" for="e_body">Message</label>
+        <textarea class="form-control" id="e_body" name="body"
+                  required maxlength="160"
+                  oninput="updateCharCount(this)">{{ campaign.body }}</textarea>
+      </div>
+      {% else %}
+      <div class="form-group">
+        <p class="form-label">Message <span class="form-label__opt">(locked after first send)</span></p>
+        <div style="background:var(--color-surface-alt,#f8fafc);border:1px solid var(--color-border,#e2e8f0);border-radius:var(--radius-md);padding:var(--sp-3);font-size:var(--font-size-sm)">
+          {{ campaign.body }}
+        </div>
+      </div>
+      {% endif %}
+      <div class="form-actions" style="padding-top:var(--sp-3);margin-top:0;border-top:none">
+        <button type="submit" class="btn btn-primary btn-sm">Save changes</button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<!-- ─── Send form ──────────────────────────────────────────────────────────── -->
+<section class="card card--primary" aria-labelledby="send-heading">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">Send</p>
+      <h2 class="card__title" id="send-heading">Send to recipients</h2>
+      <p class="card__subtitle">
+        Add recipients by typing a number, picking from contacts, or selecting a whole group.
+      </p>
+    </div>
+  </div>
+
+  <!-- Campaign message preview -->
+  <div style="background:var(--color-surface-alt,#f8fafc);border:1px solid var(--color-border,#e2e8f0);border-radius:var(--radius-md);padding:var(--sp-3) var(--sp-4);margin-bottom:var(--sp-5);font-size:var(--font-size-sm)">
+    <span style="font-size:var(--font-size-xs);color:var(--color-text-muted);display:block;margin-bottom:var(--sp-1);text-transform:uppercase;letter-spacing:.05em">Message to be sent</span>
+    {{ campaign.body }}
+  </div>
+
+  <form method="POST" action="/campaigns/{{ campaign.id }}/send" id="send-form"
+        aria-label="Send SMS form" onsubmit="return prepareSubmit()">
+
+    <!-- Recipient chip input -->
+    <div class="form-group">
+      <label class="form-label" for="chip-field">Recipients</label>
+      <div class="chip-input" id="chip-input" onclick="document.getElementById('chip-field').focus()">
+        <input type="text" class="chip-input__field" id="chip-field"
+               placeholder="Type number, press Enter or comma to add…"
+               autocomplete="off" inputmode="tel"
+               aria-label="Type a phone number and press Enter or comma to add it">
+      </div>
+      <div id="recipients-container"></div>
+      <span class="form-hint">International format e.g. +41791234567. Backspace removes the last chip.</span>
+    </div>
+
+    <!-- Group quick-add -->
+    {% if groups %}
+    <div class="form-or" role="separator">or add a whole group</div>
+    <div class="form-group">
+      <label class="form-label" for="group-picker-send">Group</label>
+      <select class="form-control" id="group-picker-send" aria-label="Select a group to add all members">
+        <option value="">Select a group</option>
+        {% for g in groups %}
+        <option value="{{ g.id }}">{{ g.name }} ({{ g.member_count }} member{{ 's' if g.member_count != 1 }})</option>
+        {% endfor %}
+      </select>
+      <span class="form-hint">Selecting a group adds all its members as recipients.</span>
+    </div>
+    {% endif %}
+
+    <!-- Contact quick-pick -->
+    {% if contacts %}
+    <div class="form-or" role="separator">or pick individual contacts</div>
+    <div class="form-group">
+      <input type="text" class="form-control" id="contact-search"
+             placeholder="Search contacts…" autocomplete="off"
+             aria-label="Search contacts to add as recipients"
+             oninput="filterPicker(this.value)">
+      <div class="contact-picker" id="contact-picker" role="listbox"
+           aria-label="Contact list, click to add as recipient">
+        {% for c in contacts %}
+        <button type="button" class="contact-picker__item"
+                role="option" aria-selected="false"
+                data-phone="{{ c.phone_number | e }}"
+                data-name="{{ c.name | e }}"
+                data-search="{{ (c.name ~ ' ' ~ c.phone_number ~ ' ' ~ (c.group_names or '')) | lower | e }}">
+          <span class="contact-picker__name">{{ c.name }}</span>
+          <span class="contact-picker__phone">{{ c.phone_number }}</span>
+          {% if c.group_names %}
+          <span class="contact-picker__group">{{ c.group_names }}</span>
+          {% endif %}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" id="send-btn" disabled
+              aria-label="Send SMS message">
+        Send to <span id="recipient-count">0</span> recipient(s)
+      </button>
+    </div>
+
+  </form>
+</section>
 
 <!-- ─── Stats ─────────────────────────────────────────────────────────────── -->
 <div class="stat-row" aria-label="Campaign summary">
@@ -131,5 +266,130 @@
   <div class="empty-state">No outbound records for this campaign.</div>
   {% endif %}
 </div>
+
+<script>
+var GROUP_MEMBERS = {{ group_members_json | safe }};
+var chips = [];
+
+function addChip(phone, label) {
+  phone = (phone || '').trim();
+  if (!phone) return;
+  if (chips.some(function(c) { return c.phone === phone; })) return;
+  chips.push({ phone: phone, label: label || phone });
+  renderChips();
+  updateSendButton();
+  markPickerItem(phone, true);
+}
+
+function removeChip(phone) {
+  chips = chips.filter(function(c) { return c.phone !== phone; });
+  renderChips();
+  updateSendButton();
+  markPickerItem(phone, false);
+}
+
+function renderChips() {
+  var container = document.getElementById('chip-input');
+  var field = document.getElementById('chip-field');
+  container.querySelectorAll('.chip').forEach(function(el) { el.remove(); });
+  chips.forEach(function(c) {
+    var chip = document.createElement('span');
+    chip.className = 'chip';
+    var lbl = document.createElement('span');
+    lbl.className = 'chip__label';
+    lbl.title = c.phone;
+    lbl.textContent = c.label;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip__remove';
+    btn.setAttribute('aria-label', 'Remove ' + c.label);
+    btn.textContent = '×';
+    btn.dataset.phone = c.phone;
+    btn.addEventListener('click', function() { removeChip(this.dataset.phone); });
+    chip.appendChild(lbl);
+    chip.appendChild(btn);
+    container.insertBefore(chip, field);
+  });
+  var hc = document.getElementById('recipients-container');
+  hc.innerHTML = '';
+  chips.forEach(function(c) {
+    var inp = document.createElement('input');
+    inp.type = 'hidden';
+    inp.name = 'recipients[]';
+    inp.value = c.phone;
+    hc.appendChild(inp);
+  });
+}
+
+function updateSendButton() {
+  var btn = document.getElementById('send-btn');
+  document.getElementById('recipient-count').textContent = chips.length;
+  btn.disabled = chips.length === 0;
+}
+
+function markPickerItem(phone, added) {
+  document.querySelectorAll('.contact-picker__item').forEach(function(el) {
+    if (el.dataset.phone === phone) {
+      el.classList.toggle('contact-picker__item--added', added);
+      el.setAttribute('aria-selected', added ? 'true' : 'false');
+    }
+  });
+}
+
+document.getElementById('chip-field').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    var val = this.value.trim().replace(/,/g, '');
+    if (val) { addChip(val, val); this.value = ''; }
+  } else if (e.key === 'Backspace' && this.value === '' && chips.length > 0) {
+    removeChip(chips[chips.length - 1].phone);
+  }
+});
+
+var groupPicker = document.getElementById('group-picker-send');
+if (groupPicker) {
+  groupPicker.addEventListener('change', function() {
+    var gid = this.value;
+    if (!gid) return;
+    var members = GROUP_MEMBERS[gid] || [];
+    members.forEach(function(m) { addChip(m.phone, m.name); });
+    this.value = '';
+  });
+}
+
+document.querySelectorAll('.contact-picker__item').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var phone = this.dataset.phone;
+    var name  = this.dataset.name;
+    if (this.classList.contains('contact-picker__item--added')) {
+      removeChip(phone);
+    } else {
+      addChip(phone, name || phone);
+    }
+  });
+});
+
+function filterPicker(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('.contact-picker__item').forEach(function(el) {
+    el.style.display = (!q || (el.dataset.search || '').includes(q)) ? '' : 'none';
+  });
+}
+
+function prepareSubmit() {
+  if (chips.length === 0) {
+    alert('Add at least one recipient before sending.');
+    return false;
+  }
+  return true;
+}
+
+function updateCharCount(el) {
+  var n = el.value.length;
+  document.getElementById('char-count').textContent = n;
+  var hint = document.getElementById('char-hint');
+  if (hint) hint.className = 'char-counter' + (n > 140 ? ' char-counter--warn' : '');
+}
+</script>
 
 {% endblock %}

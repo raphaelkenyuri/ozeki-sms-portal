@@ -3,11 +3,11 @@
 {% block content %}
 
 <div class="page-header">
-  <p class="page-header__eyebrow">Analytics</p>
+  <p class="page-header__eyebrow">Campaigns</p>
   <h1 class="page-header__title">Campaigns</h1>
   <p class="page-header__desc">
-    Every send creates a campaign. Click Details to see per-recipient delivery and response breakdown,
-    with duplicate replies deduplicated to the latest response per sender.
+    Create a campaign to compose a message and send it to recipients.
+    Click Details to see per-recipient delivery and response breakdown.
   </p>
 </div>
 
@@ -17,9 +17,12 @@
       <p class="card__eyebrow">All campaigns</p>
       <h2 class="card__title">Campaign history</h2>
     </div>
-    {% if campaigns %}
-    <span class="count-badge">{{ campaigns | length }} campaign{{ 's' if campaigns | length != 1 }}</span>
-    {% endif %}
+    <div style="display:flex;gap:var(--sp-2);align-items:center;flex-shrink:0">
+      {% if campaigns %}
+      <span class="count-badge">{{ campaigns | length }} campaign{{ 's' if campaigns | length != 1 }}</span>
+      {% endif %}
+      <a href="/campaigns/new" class="btn btn-primary btn-sm">+ New campaign</a>
+    </div>
   </div>
 
   {% if campaigns %}
@@ -28,7 +31,7 @@
       <thead>
         <tr>
           <th scope="col">Date</th>
-          <th scope="col">Message</th>
+          <th scope="col">Name / Message</th>
           <th scope="col" style="text-align:right">Sent</th>
           <th scope="col" style="text-align:right">Delivered</th>
           <th scope="col" style="text-align:right">Responded</th>
@@ -39,7 +42,14 @@
       {% for c in campaigns %}
         <tr>
           <td style="white-space:nowrap;color:var(--color-text-muted);font-size:var(--font-size-xs)">{{ c.created_at }}</td>
-          <td class="cell-truncate" title="{{ c.body | e }}">{{ c.body }}</td>
+          <td>
+            {% if c.name %}
+            <span style="font-weight:var(--font-weight-semibold)">{{ c.name }}</span>
+            <span style="display:block;color:var(--color-text-muted);font-size:var(--font-size-xs)" title="{{ c.body | e }}">{{ c.body | truncate(60) }}</span>
+            {% else %}
+            <span class="cell-truncate" title="{{ c.body | e }}">{{ c.body }}</span>
+            {% endif %}
+          </td>
           <td style="text-align:right;font-weight:var(--font-weight-semibold)">{{ c.sent_count or 0 }}</td>
           <td style="text-align:right">
             {% if c.delivered_count %}
@@ -54,7 +64,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">No campaigns yet. Send a message to create one.</div>
+  <div class="empty-state">No campaigns yet. <a href="/campaigns/new" style="color:var(--color-brand-primary)">Create your first campaign</a> to get started.</div>
   {% endif %}
 </div>
 

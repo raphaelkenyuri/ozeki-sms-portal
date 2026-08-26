@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}New Campaign | Staff Count{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <p class="page-header__eyebrow">Campaigns</p>
+  <h1 class="page-header__title">New Campaign</h1>
+  <p class="page-header__desc">
+    Create a campaign first, then send it to recipients from the campaign page.
+  </p>
+  <div style="margin-top:var(--sp-4)">
+    <a href="/campaigns" class="btn btn-outline btn-sm">← Back to campaigns</a>
+  </div>
+</div>
+
+<div class="card card--primary">
+  <div class="card__header">
+    <div class="card__heading-group">
+      <p class="card__eyebrow">New</p>
+      <h2 class="card__title">Campaign details</h2>
+    </div>
+  </div>
+
+  <form method="POST" action="/campaigns/new">
+
+    <div class="form-group">
+      <label class="form-label" for="c_name">
+        Campaign name <span class="form-label__opt">(optional)</span>
+      </label>
+      <input type="text" class="form-control" id="c_name" name="name"
+             placeholder="e.g. Weekly safety check — Week 34" autocomplete="off">
+      <span class="form-hint">A short label to identify this campaign. If left blank, the message body is used.</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="c_body">Message</label>
+      <textarea class="form-control" id="c_body" name="body"
+                required maxlength="160"
+                placeholder="Reply 2 or Safe · 3 or Unsafe · 4 or OOC for Out of country"
+                aria-describedby="char-hint"
+                oninput="updateCharCount(this)"></textarea>
+      <div class="char-counter" id="char-hint" aria-live="polite">
+        <span id="char-count">0</span> / 160 characters
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="c_window">Response window (days)</label>
+      <input type="number" class="form-control" id="c_window" name="response_window_days"
+             value="30" min="1" max="365" style="max-width:140px">
+      <span class="form-hint">
+        Replies received within this many days of sending are attributed to this campaign.
+        Increase for welfare checks where staff may respond weeks later.
+      </span>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Create campaign</button>
+      <a href="/campaigns" class="btn btn-outline">Cancel</a>
+    </div>
+
+  </form>
+</div>
+
+<script>
+function updateCharCount(el) {
+  var n = el.value.length;
+  document.getElementById('char-count').textContent = n;
+  document.getElementById('char-hint').className =
+    'char-counter' + (n > 140 ? ' char-counter--warn' : '');
+}
+</script>
+
+{% endblock %}
